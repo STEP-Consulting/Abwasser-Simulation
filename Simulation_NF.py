@@ -1,11 +1,8 @@
-
-
 # -*- coding: utf-8 -*-
 """
 Integrierte Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
 1. Bestandssystem: Biologie + Ozonung
-2. Advanced System: Vollständige Nanofiltration (optional + GAK)
-3. Advanced System: NF mit Bypass (optional + GAK)
+2. Advanced System: Nanofiltration (optional mit Bypass & GAK)
 
 Inklusive energetischem Vergleichswert der Ozonung der Kläranlage Aachen-Sörs (2018).
 """
@@ -45,11 +42,6 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- HIER FÄNGT DEIN EIGENTLICHER CODE AN ---
-
-
-
-
 # =========================================================
 # 1. STREAMLIT-KONFIGURATION
 # =========================================================
@@ -67,41 +59,15 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
     ## So funktioniert das Tool
 
     ### 1. Verfahren auswählen
-    Wähle links das Verfahren aus, das du untersuchen möchtest:
-    - **Ozonung:** Spurenstoffe werden durch Ozon behandelt.
-    - **Voll-NF:** Das gesamte Wasser wird durch die Nanofiltration (NF) geleitet.
-    - **NF mit Bypass:** Ein Teil des Wassers umgeht die Nanofiltration.
+    Wähle links das Grundverfahren aus:
+    - **Bestandssystem (Ozonung):** Spurenstoffe werden klassisch durch Ozon behandelt.
+    - **Nanofiltration (NF):** Membranverfahren. Über den Bypass-Regler kannst du steuern, ob ein Teil des Wassers an der NF vorbeigeführt wird.
 
     ### 2. Aktivkohle zuschalten (optional)
     Aktiviere das **GAK-Polishing** (granulierte Aktivkohle), um eine zusätzliche Reinigungsstufe zu simulieren.
-    Über die Betriebsdauer kannst du untersuchen, wie sich die Reinigungsleistung bei zunehmender Nutzung verändert.
 
     ### 3. Ergebnisse prüfen
-    Die Ergebnisse aktualisieren sich automatisch. Das Dashboard zeigt dir unter anderem:
-    - **Spurenstoffentfernung:** Wie stark die betrachteten Stoffe reduziert werden.
-    - **Grenzwertvergleich:** Wie die berechneten Werte zu den hinterlegten Grenzwerten und Szenario-Zielwerten stehen.
-    - **Wasser- und Stoffströme:** Wie sich Wassermengen und Stofffrachten im Prozess verteilen.
-    - **Energiebedarf:** Wie viel Energie das Verfahren benötigt.
-    - **Vergleich zur Ozonung:** Wie der Energiebedarf im Vergleich zur Ozonung der KA Aachen-Sörs ausfällt.
-
-    ### 4. Varianten vergleichen
-    Ändere die Einstellungen und vergleiche die Ergebnisse. So kannst du erkennen, wie sich unterschiedliche Verfahrensvarianten auf Reinigungsleistung, Stoffströme und Energiebedarf auswirken.
-
-    ---
-
-    ## Was steckt hinter der Berechnung?
-
-    **Konzentrat-Rückführung**  
-    Ein einstellbarer Anteil des NF-Konzentrats wird in die Biologie zurückgeführt. Der verbleibende Anteil wird als Konzentrat aus dem Prozess ausgeschleust.
-
-    **GAK-Polishing**  
-    Das Modell bildet vereinfacht ab, wie die Aktivkohle im Laufe der Betriebszeit an Reinigungsleistung verlieren kann.
-
-    **Modellcharakter**  
-    Die Ergebnisse beruhen auf hinterlegten Parametern, Literaturwerten und Modellannahmen. Sie dienen dem vergleichenden Konzeptentwurf und sind keine Garantie für die spätere Anlagenleistung.
-
-    **Grenzwerte richtig einordnen**  
-    Angezeigt wird der Vergleich mit den im Tool hinterlegten Grenzwerten (AbwV) und dem eigenen Szenario-Zielwert für PFOA + PFOS. Ob die AbwV-Werte rechtlich aktuell und auf den jeweiligen Anwendungsfall anwendbar sind, muss gesondert geprüft werden. Der Szenario-Zielwert ist kein gesetzlicher Grenzwert.
+    Das Dashboard zeigt dir Spurenstoffentfernung, Frachtbilanzen, Energiebedarf und den Vergleich zur Ozonung Aachen-Sörs (2018).
     """)
 
 # =========================================================
@@ -179,23 +145,26 @@ OZON_PARAMETER = {
 }
 
 # =========================================================
-# 3. SEITENLEISTE
+# 3. SEITENLEISTE (2 HAUPTOPTIONEN + DYNAMISCHER BYPASS)
 # =========================================================
 
 st.sidebar.header("⚙️ Verfahrensauswahl")
 
 verfahrens_wahl = st.sidebar.radio(
     "Konzept",
-    ["Bestandssystem (Ozonung)", "Vollständige Nanofiltration", "Nanofiltration mit Bypass"]
+    ["Bestandssystem (Ozonung)", "Nanofiltration (NF)"]
 )
 
 is_ozon = (verfahrens_wahl == "Bestandssystem (Ozonung)")
-is_full_nf = (verfahrens_wahl == "Vollständige Nanofiltration")
-is_bypass_nf = (verfahrens_wahl == "Nanofiltration mit Bypass")
 
 with st.sidebar.expander("🔀 Hydraulik & Mengenströme", expanded=True):
     q_feed = st.slider("Rohwasserzulauf Q (m³/h)", 10.0, 500.0, 100.0, 5.0)
-    bypass_fraction = st.slider("Bypass-Anteil Bioablauf", 0.0, 0.80, 0.20, 0.05) if is_bypass_nf else 0.0
+    if not is_ozon:
+        bypass_fraction = st.slider("Bypass-Anteil Bioablauf", 0.0, 0.80, 0.0, 0.05)
+    else:
+        bypass_fraction = 0.0
+
+has_bypass = (not is_ozon) and (bypass_fraction > 0.0)
 
 if is_ozon:
     with st.sidebar.expander("🧪 Ozonung", expanded=True):
@@ -276,13 +245,12 @@ except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 # =========================================================
-# 4. DYNAMISCHES FLIEßBILD (SVG)
+# 4. DYNAMISCHES FLIEßBILD (SVG MIT FIXIERTEM BYPASS)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
 
-
-def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
+def build_process_svg(is_ozon, has_bypass, aktivieren_gak):
     parts = []
 
     def text(x, y, label, cls="label", anchor="middle"):
@@ -319,7 +287,7 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
       </style>
     """)
 
-    
+    # Vorklärung & Einlauf
     parts.append(text(130, 15, "Vorklärung", "subtitle"))
     parts.append(text(12, 91, "Kommunales", anchor="start"))
     parts.append(text(12, 108, "Abwasser", anchor="start"))
@@ -331,14 +299,14 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
 
     parts.append(line([(165, 100), (225, 100)], arrow=True))
 
-    
+    # Biologie
     parts.append(text(300, 15, "Biologische Reinigung", "subtitle"))
     parts.append(box(225, 65, 150, 70, "Biologie"))
     parts.append(line([(300, 135), (300, 167)], arrow=True))
     parts.append(text(310, 158, "Schlammabzug", "label", "start"))
 
     if is_ozon:
-        
+        # Ozonung-Zweig
         parts.append(text(625, 15, "Ozonung", "subtitle"))
         parts.append(line([(375, 100), (550, 100)], arrow=True))
         parts.append(box(550, 65, 150, 70, "Ozonung"))
@@ -346,10 +314,10 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
         parts.append(text(785, 94, "Gereinigtes", anchor="start"))
         parts.append(text(785, 111, "Abwasser", anchor="start"))
     else:
-
+        # Nanofiltration-Zweig
         parts.append(text(600, 15, "Nanofiltration", "subtitle"))
 
-        if not is_full_nf:
+        if has_bypass:
             parts.append(line([(375, 100), (430, 100)], arrow=True))
             parts.append('<circle cx="430" cy="100" r="3.5" class="junction"/>')
             parts.append(line([(430, 100), (430, 55), (750, 55), (750, 100)], arrow=True))
@@ -366,7 +334,7 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
 
         parts.append(line([(655, 100), (750, 100)]))
 
-        if not is_full_nf:
+        if has_bypass:
             parts.append('<circle cx="750" cy="100" r="3.5" class="junction"/>')
 
         parts.append(line([(595, 140), (595, 215), (205, 215), (205, 125), (225, 125)], arrow=True))
@@ -376,7 +344,6 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
         parts.append(text(640, 180, "Konzentrat", "label", "start"))
 
         if aktivieren_gak:
-        
             parts.append(text(825, 30, "Aktivkohleadsorption", "subtitle"))
             parts.append(line([(750, 100), (775, 100)], arrow=True))
             parts.append(box(775, 70, 100, 60, "GAK"))
@@ -391,8 +358,7 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
     parts.append("</svg>")
     return "".join(parts)
 
-
-svg_schema = build_process_svg(is_ozon=is_ozon, is_full_nf=is_full_nf, aktivieren_gak=aktivieren_gak)
+svg_schema = build_process_svg(is_ozon=is_ozon, has_bypass=has_bypass, aktivieren_gak=aktivieren_gak)
 html_schema = f"""
 <div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
     <div style="min-width: 760px;">{svg_schema}</div>
@@ -434,7 +400,6 @@ for start in range(0, len(trace_stoffe), 4):
 df = df_stoff.copy()
 df["C_Rohwasser"] = df["Substanzname"].map(st.session_state.c_roh)
 
-
 # =========================================================
 # 6. SIMULATIONSLOGIK
 # =========================================================
@@ -453,7 +418,6 @@ def kreislauf_fluesse(q_feed, bypass, Y, r):
     return dict(a=a, q_bio=q_bio, q_nf=q_nf, q_bypass=q_bypass, q_perm=q_perm,
                 q_konz_ges=q_konz_ges, q_rez=q_rez, q_konz_aus=q_konz_aus, q_prod=q_prod)
 
-
 if is_ozon:
     fl, q_produkt = None, q_feed
     hrt_eff_h = hrt_h
@@ -462,14 +426,11 @@ else:
     q_produkt = fl["q_prod"]
     hrt_eff_h = hrt_h * q_feed / fl["q_bio"]
 
-
 def berechne_vorklaerung(row, eta):
     c = float(row["C_Rohwasser"])
     return c * (1.0 - eta) if row["Gruppe"] == "Summenparameter" else c
 
-
 df["C_Vorklaerung"] = df.apply(lambda row: berechne_vorklaerung(row, eta_vorklaerung), axis=1)
-
 
 def berechne_biologie(row, x_ts, srt, hrt_d):
     c_in = float(row["C_Vorklaerung"])
@@ -499,13 +460,11 @@ def berechne_biologie(row, x_ts, srt, hrt_d):
         "Bio_Abbauanteil_%": e_bio * 100.0
     })
 
-
 bio_eff = df.apply(lambda row: berechne_biologie(row, x_ts, srt, hrt_eff_h / 24.0), axis=1)
 df[["C_Bio_Ablauf", "Bio_Elimination_%", "Bio_Sorptionsanteil_%", "Bio_Abbauanteil_%"]] = bio_eff
 
 bio_ref = df.apply(lambda row: berechne_biologie(row, x_ts, srt, hrt_h / 24.0), axis=1)
 df["C_Bio_Ablauf_ref"] = bio_ref["C_Bio_Ablauf"]
-
 
 def wende_ozon_an(row, dosis):
     substanz = row["Substanzname"]
@@ -532,11 +491,9 @@ def wende_ozon_an(row, dosis):
 
     return c_in, 0.0
 
-
 df["alpha"] = np.where(df["Ladung_z"] < 0, 1.0 / (1.0 + 10.0 ** (df["pKa"] - PH_SYS_FIX)), 0.0)
 df["R_size"] = lognorm.cdf(df["MW"], s=sigma_poren, scale=mwco_median)
 df.loc[df["Gruppe"] == "Summenparameter", "R_size"] = 0.0
-
 
 def get_nf_retention(row):
     if row["Gruppe"] == "Summenparameter":
@@ -546,9 +503,7 @@ def get_nf_retention(row):
     p_charge = float(np.clip(1.0 - charge_factor, 0.0, 1.0))
     return float(np.clip(1.0 - (p_size * p_charge), 0.0, 0.99))
 
-
 df["R_NF"] = df.apply(get_nf_retention, axis=1)
-
 
 def kreislauf_stoffstrom(c_vkl, E, R, Y, r, q_feed, fl, E_rez=None):
     if E_rez is None:
@@ -563,7 +518,6 @@ def kreislauf_stoffstrom(c_vkl, E, R, Y, r, q_feed, fl, E_rez=None):
     c_prod = (fl["q_perm"] * c_perm + fl["q_bypass"] * c_bio) / fl["q_prod"]
     c_zu_bio = (q_feed * c_vkl + fl["q_rez"] * c_konz) / fl["q_bio"]
     return c_zu_bio, c_bio, c_perm, c_konz, c_prod
-
 
 def wende_gak_an(c_in, row, ebct, q_produkt_m3h, betriebstage, doc_faktor):
     if row["Gruppe"] == "Summenparameter" or pd.isna(c_in) or c_in <= 0:
@@ -596,7 +550,6 @@ def wende_gak_an(c_in, row, ebct, q_produkt_m3h, betriebstage, doc_faktor):
     rem = float(np.clip(rem, 0.0, 0.99))
     c_out = max(0.0, float(c_in * (1.0 - rem)))
     return c_out, rem * 100.0
-
 
 result_rows = []
 for _, row in df.iterrows():
@@ -662,13 +615,12 @@ df_res = pd.DataFrame(result_rows)
 # 7. DASHBOARD: KERN-METRIKEN
 # =========================================================
 
-st.header(f"🎯 Zielwertüberwachung: {verfahrens_wahl}")
-
+verfahren_label = "Bestandssystem (Ozonung)" if is_ozon else f"Nanofiltration (Bypass: {int(bypass_fraction*100)}%)"
+st.header(f"🎯 Zielwertüberwachung: {verfahren_label}")
 
 def get_concentration(stoff):
     values = df_res.loc[df_res["Substanzname"] == stoff, "C_Endwasser"].values
     return float(values[0]) if len(values) else np.nan
-
 
 csb_end = get_concentration("CSB")
 bsb_end = get_concentration("BSB5")
@@ -707,10 +659,7 @@ st.divider()
 
 if is_ozon:
     st.header("💶 Betriebskostenbilanz (OPEX) – Ozonung")
-
-    # Fester Wert statt Slider
     spez_opex_ozon = 0.018
-
     wassermenge_jahr = q_feed * BETRIEBSSTUNDEN_JAHR
     opex_gesamt_jahr = wassermenge_jahr * spez_opex_ozon
 
@@ -749,9 +698,7 @@ if not is_ozon:
         st.metric("Gesamtenergie NF + GAK",
                   f"{jahresenergie_nf_kwh + jahresenergie_gak_kwh:,.0f} kWh/a".replace(",", "."))
 
-        # Kohleverbrauch aus Bettvolumina bis zum Wechsel und Schüttdichte
         bv_wechsel = 1440.0 * gak_standzeit_tage / gak_ebct
-
         gak_spez_verbrauch = GAK_SCHUETTDICHTE_KG_M3 * 1000.0 / bv_wechsel
         gak_jahresbedarf_t = gak_spez_verbrauch * q_produkt * BETRIEBSSTUNDEN_JAHR / 1.0e6
         g1, g2 = st.columns(2)
@@ -803,23 +750,21 @@ st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 st.subheader("📈 Konzentrationsvergleich: Rohwasser vs. Endwasser")
 chart_df = df_res.loc[df_res["Gruppe"] != "Summenparameter", ["Substanzname", "C_Rohwasser", "C_Endwasser"]].melt(
-    id_vars=["Substanzname"], var_name="Prozessschritt", value_name="Konzentration")
-chart_df["Prozessschritt"] = chart_df["Prozessschritt"].map(
-    {"C_Rohwasser": "1. Rohwasser", "C_Endwasser": "2. Endwasser (Final)"})
+    id_vars=["Substanzname"], var_name="Prozessschritt", value_name="Konzentration"
+)
 
-chart = alt.Chart(chart_df).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
-    x=alt.X("Substanzname:N", title="Substanz", axis=alt.Axis(labelAngle=-45)),
-    xOffset="Prozessschritt:N",
-    y=alt.Y("Konzentration:Q", title="Konzentration (ng/L)", scale=alt.Scale(type="symlog")),
-    color=alt.Color("Prozessschritt:N", title="Messstelle",
-                    scale=alt.Scale(domain=["1. Rohwasser", "2. Endwasser (Final)"], range=["#1e88e5", "#43a047"])),
-    tooltip=["Substanzname:N", "Prozessschritt:N", alt.Tooltip("Konzentration:Q", format=".1f")]
-).properties(height=400).configure_view(strokeWidth=0)
+chart_df["Prozessschritt"] = chart_df["Prozessschritt"].map({
+    "C_Rohwasser": "Rohwasser",
+    "C_Endwasser": "Endwasser (gereinigt)"
+})
+
+chart = alt.Chart(chart_df).mark_bar().encode(
+    x=alt.X("Substanzname:N", title="Substanz", sort=None),
+    y=alt.Y("Konzentration:Q", title="Konzentration"),
+    color=alt.Color("Prozessschritt:N", title="Prozessschritt"),
+    column=alt.Column("Substanzname:N", header=alt.Header(title=None, labelOrient="bottom"))
+).properties(
+    width=40
+)
 
 st.altair_chart(chart, use_container_width=True)
-
-# CSV-Export
-csv = df_res.to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig")
-st.download_button("Ergebnisse als CSV herunterladen", data=csv, file_name="abwasser_konzept_simulation.csv",
-                   mime="text/csv")
-st.success("Simulation erfolgreich ausgeführt.")
