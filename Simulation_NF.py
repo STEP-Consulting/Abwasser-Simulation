@@ -302,7 +302,7 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
       </style>
     """)
 
-    parts.append(text(130, 15, "1. Stufe", "stage"))
+    
     parts.append(text(130, 30, "Vorklärung", "subtitle"))
     parts.append(text(12, 91, "Kommunales", anchor="start"))
     parts.append(text(12, 108, "Abwasser", anchor="start"))
@@ -314,14 +314,14 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
 
     parts.append(line([(165, 100), (225, 100)], arrow=True))
 
-    parts.append(text(300, 15, "2. Stufe", "stage"))
+    
     parts.append(text(300, 30, "Biologische Reinigung", "subtitle"))
     parts.append(box(225, 65, 150, 70, "Biologie"))
     parts.append(line([(300, 135), (300, 167)], arrow=True))
     parts.append(text(310, 158, "Schlammabzug", "label", "start"))
 
     if is_ozon:
-        parts.append(text(625, 15, "3. Stufe", "stage"))
+        
         parts.append(text(625, 30, "Ozonung", "subtitle"))
         parts.append(line([(375, 100), (550, 100)], arrow=True))
         parts.append(box(550, 65, 150, 70, "Ozonung"))
@@ -329,7 +329,7 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
         parts.append(text(785, 94, "Gereinigtes", anchor="start"))
         parts.append(text(785, 111, "Abwasser", anchor="start"))
     else:
-        parts.append(text(600, 15, "3. Stufe", "stage"))
+
         parts.append(text(600, 30, "Nanofiltration", "subtitle"))
 
         if not is_full_nf:
