@@ -258,6 +258,23 @@ PH_SYS_FIX = 7.5
 GAK_SCHUETTDICHTE_KG_M3 = 450.0
 SZENARIO_ZIELWERT_PFOA_PFOS = 300.0
 
+# --- PDF-DOWNLOAD IN DER SEITENLEISTE ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📄 Dokumentation")
+
+try:
+    with open("Begleitdokument.pdf", "rb") as pdf_file:
+        PDF_BYTE = pdf_file.read()
+    
+    st.sidebar.download_button(
+        label="📥 Begleitdokument öffnen / laden",
+        data=PDF_BYTE,
+        file_name="Begleitdokument_Abwasser_Simulation.pdf",
+        mime="application/pdf"
+    )
+except FileNotFoundError:
+    st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
+
 # =========================================================
 # 4. DYNAMISCHES FLIEßBILD (SVG)
 # =========================================================
