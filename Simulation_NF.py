@@ -727,7 +727,7 @@ else:
 st.divider()
 
 # =========================================================
-# 11. TABELLE & DIAGRAMM
+# 11. TABELLE & STUFEN-ELIMINATIONS-DIAGRAMM
 # =========================================================
 
 st.header("📊 Detaillierte Stoffbilanz")
@@ -748,23 +748,61 @@ for col in display_df.columns:
 
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-st.subheader("📈 Konzentrationsvergleich: Rohwasser vs. Endwasser")
-chart_df = df_res.loc[df_res["Gruppe"] != "Summenparameter", ["Substanzname", "C_Rohwasser", "C_Endwasser"]].melt(
-    id_vars=["Substanzname"], var_name="Prozessschritt", value_name="Konzentration"
-)
+st.subheader("📈 Verursacher- & Stufen-Analyse: Fracht- und Eliminationsaufteilung")
+st.markdown("Dieses gestapelte Diagramm zeigt, welcher Anteil der Rohwasserfracht in welcher Verfahrensstufe eliminiert, ausgeschleust oder ins gereinigte Endwasser überführt wird (Gesamtsumme = 100 %).")
 
-chart_df["Prozessschritt"] = chart_df["Prozessschritt"].map({
-    "C_Rohwasser": "Rohwasser",
-    "C_Endwasser": "Endwasser (gereinigt)"
-})
+if not is_ozon:
+    stack_df = df_res.loc[df_res["Gruppe"] != "Summenparameter", [
+        "Substanzname", "Fracht_Biologie_%", "Fracht_Konzentrat_%", "Fracht_GAK_%", "Fracht_Produkt_%"
+    ]].melt(
+        id_vars=["Substanzname"],
+        value_vars=["Fracht_Biologie_%", "Fracht_Konzentrat_%", "Fracht_GAK_%", "Fracht_Produkt_%"],
+        var_name="Prozessstufe",
+        value_name="Anteil_Prozent"
+    )
 
-chart = alt.Chart(chart_df).mark_bar().encode(
-    x=alt.X("Substanzname:N", title="Substanz", sort=None),
-    y=alt.Y("Konzentration:Q", title="Konzentration"),
-    color=alt.Color("Prozessschritt:N", title="Prozessschritt"),
-    column=alt.Column("Substanzname:N", header=alt.Header(title=None, labelOrient="bottom"))
-).properties(
-    width=40
-)
+    stack_df["Prozessstufe"] = stack_df["Prozessstufe"].map({
+        "Fracht_Biologie_%": "1. Biologie (Abbau / Sorption)",
+        "Fracht_Konzentrat_%": "2. NF-Konzentrat (Ausschleusung)",
+        "Fracht_GAK_%": "3. GAK-Filter (Adsorption)",
+        "Fracht_Produkt_%": "4. Verbleib im Endwasser"
+    })
 
-st.altair_chart(chart, use_container_width=True)
+    chart = alt.Chart(stack_df).mark_bar().encode(
+        x=alt.X("Substanzname:N", title="Substanz", sort=None),
+        y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser-Eintrag (%)", stack="zero"),
+        color=alt.Color("Prozessstufe:N", title="Verbleib / Elimination über Stufe",
+                        scale=alt.Scale(scheme="tableau10")),
+        tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
+    ).properties(
+        height=400
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+else:
+    # Für Ozonung: Aufteilung in Bio, Ozon und Endwasser
+    ozon_stack_rows = []
+    for _, row in df_res.loc[df_res["Gruppe"] != "Summenparameter"].iterrows():
+        c_roh = row["C_Rohwasser"]
+        c_bio = row["C_Bio_Ablauf"]
+        c_end = row["C_Endwasser"]
+        
+        bio_rem_pct = max(0.0, (1.0 - (c_bio / c_roh))) * 100 if c_roh > 0 else 0
+        ozon_rem_pct = max(0.0, ((c_bio - c_end) / c_roh)) * 100 if c_roh > 0 else 0
+        end_pct = max(0.0, (c_end / c_roh)) * 100 if c_roh > 0 else 0
+        
+        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "1. Biologischer Abbau", "Anteil_Prozent": bio_rem_pct})
+        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "2. Ozonung", "Anteil_Prozent": ozon_rem_pct})
+        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "3. Verbleib im Endwasser", "Anteil_Prozent": end_pct})
+        
+    stack_df = pd.DataFrame(ozon_stack_rows)
+    chart = alt.Chart(stack_df).mark_bar().encode(
+        x=alt.X("Substanzname:N", title="Substanz", sort=None),
+        y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser (%)", stack="zero"),
+        color=alt.Color("Prozessstufe:N", title="Prozessstufe",
+                        scale=alt.Scale(scheme="tableau10")),
+        tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
+    ).properties(
+        height=400
+    )
+    st.altair_chart(chart, use_container_width=True)
