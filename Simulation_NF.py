@@ -2,7 +2,7 @@
 """
 Integrierte Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
 1. Bestandssystem: Biologie + Ozonung
-2. Advanced System: Nanofiltration (optional mit Bypass, GAK & Konzentrat-GAK mit Rückführung)
+2. Advanced System: Nanofiltration (optional mit Bypass, GAK & Konzentrat-GAK mit geschlossener Rückführung)
 
 Inklusive energetischem Vergleichswert der Ozonung der Kläranlage Aachen-Sörs (2018).
 """
@@ -64,7 +64,7 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
     - **Nanofiltration (NF):** Membranverfahren mit optionalem Bypass, Produkt-GAK und Konzentrat-GAK inklusive geschlossener Kreislaufrückführung.
 
     ### 2. Kreislauf & Massenbilanz
-    Das gereinigte Konzentrat aus der Konzentrat-GAK wird anteilig in den biologischen Hauptstrom zurückgeführt. Das Modell berechnet die iterativen Massenströme und schließt die Frachtbilanz zu 100 %.
+    Das gereinigte Konzentrat aus der Konzentrat-GAK wird vollständig in den biologischen Hauptstrom zurückgeführt. Das Modell berechnet die iterativen Massenströme und schließt die Frachtbilanz zu 100 %.
     """)
 
 # =========================================================
@@ -245,7 +245,7 @@ except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 # =========================================================
-# 4. DYNAMISCHES FLIEßBILD (SVG)
+# 4. DYNAMISCHES FLIEßBILD (SVG MIT GESCHLOSSENEM KONZENTRAT-RÜCKLAUF)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
@@ -335,14 +335,13 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         if has_bypass:
             parts.append('<circle cx="750" cy="100" r="3.5" class="junction"/>')
 
-        # Konzentrat-Linie mit optionaler Konzentrat-GAK und Rückführung
+        # Konzentrat-Führung mit GAK & geschlossener Rückführung nach oben
         if aktivieren_konz_gak:
-            parts.append(line([(630, 140), (630, 175)], arrow=True))
-            parts.append(box(580, 175, 100, 45, "Konz-GAK"))
-            parts.append(line([(630, 220), (630, 245)], arrow=True))
-            parts.append(text(645, 235, "Konzentrat-Abst.", "label", "start"))
-            parts.append(line([(580, 197), (205, 197), (205, 125), (225, 125)], arrow=True))
-            parts.append(text(390, 186, "Gereinigte Konzentrat-Rückführung", "label"))
+            parts.append(line([(630, 140), (630, 160)], arrow=True))
+            parts.append(box(580, 160, 100, 45, "Konz-GAK"))
+            # Rückleitung aus Konz-GAK zurück in die Biologie (geschlossener Kreislauf)
+            parts.append(line([(580, 182), (185, 182), (185, 125), (225, 125)], arrow=True))
+            parts.append(text(380, 171, "Gereinigte Konzentrat-Rückführung", "label"))
         else:
             parts.append(line([(630, 140), (630, 185)], arrow=True))
             parts.append(text(640, 180, "Konzentrat", "label", "start"))
@@ -549,7 +548,6 @@ def kreislauf_stoffstrom_konz_gak(c_vkl, E, R, Y, r, q_feed, fl, row, aktivieren
     Y = min(Y, 0.99)
     cpf = 1.0 - float(np.clip(R, 0.0, 1.0))
     
-    # Iterative Annäherung des geschlossenen Stoffkreislaufs
     c_bio = c_vkl * (1.0 - E)
     c_konz_gac = 0.0
     for _ in range(15):
@@ -561,7 +559,6 @@ def kreislauf_stoffstrom_konz_gak(c_vkl, E, R, Y, r, q_feed, fl, row, aktivieren
         else:
             c_konz_gac = c_konz
             
-        # Vermischung des gereinigten Konzentrats (q_rez) mit dem Rohwasser-Zulauf in der Biologie
         c_zu_bio = (q_feed * c_vkl + fl["q_rez"] * c_konz_gac) / fl["q_bio"]
         c_bio = c_zu_bio * (1.0 - E)
         
@@ -604,7 +601,6 @@ for _, row in df.iterrows():
             c_final = c_nach_nf
 
         if fracht_in > 0:
-            # Strikte Frachtbilanz inklusive Rückführung und Adsorption
             f_bio = (E * (q_feed * c_vkl + fl["q_rez"] * c_konz_gac)) / fracht_in * 100.0
             f_konz = (fl["q_konz_aus"] * c_konz_gac) / fracht_in * 100.0
             if aktivieren_konz_gak and c_konz > 0:
