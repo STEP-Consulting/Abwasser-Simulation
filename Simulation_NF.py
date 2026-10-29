@@ -752,7 +752,7 @@ for col in display_df.columns:
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 st.subheader("📈 Verursacher- & Stufen-Analyse: Fracht- und Eliminationsaufteilung")
-st.markdown("Dieses gestapelte Diagramm zeigt, welcher Anteil der Rohwasserfracht in welcher Verfahrensstufe eliminiert, ausgeschleust oder ins gereinigte Endwasser überführt wird (Gesamtsumme = 100 %).")
+st.markdown("Dieses gestapelte Diagramm zeigt, welcher Anteil der Rohwasserfracht in welcher Verfahrensstufe eliminiert oder ins gereinigte Endwasser überführt wird (Gesamtsumme = 100 %).")
 
 if not is_ozon:
     stack_df = df_res.loc[df_res["Gruppe"] != "Summenparameter", [
@@ -783,19 +783,25 @@ if not is_ozon:
     st.altair_chart(chart, use_container_width=True)
 
 else:
-    # Für Ozonung: Aufteilung in Bio, Ozon und Endwasser
+    # Robuste Aufteilung für Ozonung (Biologie, Ozon, Endwasser)
     ozon_stack_rows = []
     for _, row in df_res.loc[df_res["Gruppe"] != "Summenparameter"].iterrows():
-        c_roh = row["C_Rohwasser"]
-        c_bio = row["C_Bio_Ablauf"]
-        c_end = row["C_Endwasser"]
+        c_roh = float(row["C_Rohwasser"])
+        c_bio = float(row.get("C_Bio_Ablauf", row["C_Endwasser"])) # Fallback
+        c_end = float(row["C_Endwasser"])
         
-        bio_rem_pct = max(0.0, (1.0 - (c_bio / c_roh))) * 100 if c_roh > 0 else 0
-        ozon_rem_pct = max(0.0, ((c_bio - c_end) / c_roh)) * 100 if c_roh > 0 else 0
-        end_pct = max(0.0, (c_end / c_roh)) * 100 if c_roh > 0 else 0
-        
-        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "1. Biologischer Abbau", "Anteil_Prozent": bio_rem_pct})
-        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "2. Ozonung", "Anteil_Prozent": ozon_rem_pct})
+        if c_roh > 0:
+            # Anteil der durch Biologie verschwindet
+            bio_pct = max(0.0, (1.0 - (c_bio / c_roh))) * 100.0
+            # Anteil der durch Ozon zusätzlich verschwindet
+            ozon_pct = max(0.0, ((c_bio - c_end) / c_roh)) * 100.0
+            # Rest im Endwasser
+            end_pct = max(0.0, (c_end / c_roh)) * 100.0
+        else:
+            bio_pct, ozon_pct, end_pct = 0.0, 0.0, 0.0
+
+        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "1. Biologischer Abbau", "Anteil_Prozent": bio_pct})
+        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "2. Ozonung", "Anteil_Prozent": ozon_pct})
         ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "3. Verbleib im Endwasser", "Anteil_Prozent": end_pct})
         
     stack_df = pd.DataFrame(ozon_stack_rows)
