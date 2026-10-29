@@ -19,7 +19,7 @@ from scipy.stats import lognorm
 from html import escape
 
 # --- EINFACHER PASSWORDSCHUTZ ---
-PASSWORD = "dein-geheimes-passwort"  # Hier dein Wunschpasswort eintragen
+PASSWORD = "Passwort"  # Hier dein Wunschpasswort eintragen
 
 def check_password():
     """Gibt True zurück, wenn das Passwort korrekt eingegeben wurde."""
