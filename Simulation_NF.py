@@ -1,3 +1,5 @@
+
+
 # -*- coding: utf-8 -*-
 """
 Integrierte Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
@@ -15,6 +17,38 @@ import numpy as np
 import altair as alt
 from scipy.stats import lognorm
 from html import escape
+
+# --- EINFACHER PASSWORDSCHUTZ ---
+PASSWORD = "dein-geheimes-passwort"  # Hier dein Wunschpasswort eintragen
+
+def check_password():
+    """Gibt True zurück, wenn das Passwort korrekt eingegeben wurde."""
+    if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
+
+    if st.session_state["password_correct"]:
+        return True
+
+    # Login-Maske anzeigen
+    st.subheader("🔒 Passwortgeschützter Bereich")
+    pwd = st.text_input("Bitte gib das Passwort ein, um die Simulation zu starten:", type="password")
+    
+    if st.button("Anmelden"):
+        if pwd == PASSWORD:
+            st.session_state["password_correct"] = True
+            st.rerun()
+        else:
+            st.error("Falsches Passwort!")
+    return False
+
+# Wenn das Passwort nicht stimmt, stoppt das Skript hier
+if not check_password():
+    st.stop()
+
+# --- HIER FÄNGT DEIN EIGENTLICHER CODE AN ---
+
+
+
 
 # =========================================================
 # 1. STREAMLIT-KONFIGURATION
