@@ -188,7 +188,10 @@ if not is_ozon:
         if aktivieren_gak:
             gak_ebct = st.slider("Kontaktzeit EBCT (min)", 5.0, 30.0, 15.0, 1.0)
             gak_delta_p = st.slider("GAK-Druckverlust ΔP (bar)", 0.2, 2.0, 0.6, 0.1)
-            gak_standzeit_tage = st.slider("Filter-Betriebstage (Erschöpfung)", 30, 730, 180, 30)
+            gak_standzeit_tage = st.slider(
+    "Filter-Betriebstage (Erschöpfung)", 
+    30, 365, 180, 30  # Von 30 bis 365 Tage (1 Jahr), in 30er-Schritten
+)
             doc_faktor = st.slider("Matrix-Faktor (DOC-Konkurrenz)", 0.1, 0.8, 0.35, 0.05)
         else:
             gak_ebct, gak_delta_p, gak_standzeit_tage, doc_faktor = 0.0, 0.0, 0, 0.35
