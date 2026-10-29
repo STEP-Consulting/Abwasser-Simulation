@@ -376,7 +376,7 @@ def build_process_svg(is_ozon, is_full_nf, aktivieren_gak):
         parts.append(text(640, 180, "Konzentrat", "label", "start"))
 
         if aktivieren_gak:
-            parts.append(text(825, 15, "4. Stufe", "stage"))
+        
             parts.append(text(825, 30, "Aktivkohleadsorption", "subtitle"))
             parts.append(line([(750, 100), (775, 100)], arrow=True))
             parts.append(box(775, 70, 100, 60, "GAK"))
