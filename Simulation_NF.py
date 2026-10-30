@@ -631,6 +631,7 @@ for _, row in df.iterrows():
     if is_ozon:
         c_bio = float(row["C_Bio_Ablauf"])
         c_final, ozon_elim_pct = wende_ozon_an(row, ozon_dosis)
+        c_nach_nf = c_bio  # Für einheitliche Variable im Profil
     else:
         r_nf = float(row["R_NF"])
         nf_elim_pct = r_nf * 100.0
@@ -676,7 +677,7 @@ for _, row in df.iterrows():
     result_rows.append({
         "Substanzname": row["Substanzname"], "Gruppe": row["Gruppe"], "Einheit": row["Einheit"],
         "C_Rohwasser": c_roh, "Bio_Elimination_%": row["Bio_Elimination_%"],
-        "C_Bio_Ablauf": c_bio, "Akkumulation_Bio_x": akkum,
+        "C_Bio_Ablauf": c_bio, "C_Nach_NF": c_nach_nf, "Akkumulation_Bio_x": akkum,
         "R_NF_%": nf_elim_pct, "Ozon_Elimination_%": ozon_elim_pct,
         "GAK_Elimination_%": gak_elim_pct, "Konz_GAK_Elimination_%": konz_gak_elim_pct,
         "C_Endwasser": c_final,
@@ -743,3 +744,88 @@ if not is_ozon:
     h2.metric("NF-Zulauf Q_NF", f"{fl['q_nf']:.1f} m³/h")
     h3.metric("Rücklaufstrom Q_rez", f"{fl['q_rez']:.1f} m³/h")
     h4.metric("Ausgeschl. Konzentrat", f"{fl['q_konz_aus']:.1f} m³/h")
+    st.divider()
+
+# =========================================================
+# 11. TABELLE & LINIEN-KONZENTRATIONSPROFIL
+# =========================================================
+
+st.header("📊 Detaillierte Stoffbilanz & Verlauf")
+
+display_cols = ["Substanzname", "Gruppe", "Einheit", "C_Rohwasser", "Bio_Elimination_%"]
+if is_ozon:
+    display_cols.append("Ozon_Elimination_%")
+else:
+    display_cols.extend(["R_NF_%"])
+    if aktivieren_gak:
+        display_cols.append("GAK_Elimination_%")
+    if aktivieren_konz_gak:
+        display_cols.append("Konz_GAK_Elimination_%")
+display_cols.extend(["C_Endwasser", "Konzentrationsreduktion_%"])
+
+display_df = df_res[display_cols].copy()
+for col in display_df.columns:
+    if col not in ["Substanzname", "Gruppe", "Einheit"]:
+        display_df[col] = display_df[col].round(2)
+
+st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+st.subheader("📈 Linien-Konzentrationsprofil über die Reinigungsstufen")
+
+verfügbare_substanzen = df_res.loc[df_res["Gruppe"] != "Summenparameter", "Substanzname"].tolist()
+ausgewählte_substanzen = st.multiselect(
+    "Substanzen für das Profil auswählen:",
+    options=verfügbare_substanzen,
+    default=["PFOA", "Diclofenac", "Carbamazepin", "Ibuprofen"] if "Diclofenac" in verfügbare_substanzen else verfügbare_substanzen[:3]
+)
+
+if ausgewählte_substanzen:
+    profile_rows = []
+    
+    for _, row in df_res[df_res["Substanzname"].isin(ausgewählte_substanzen)].iterrows():
+        substanz = row["Substanzname"]
+        c_roh = float(row["C_Rohwasser"])
+        
+        if c_roh <= 0:
+            continue
+            
+        c_vkl_rel = (float(row.get("C_Vorklaerung", c_roh)) / c_roh) * 100.0
+        c_bio_rel = (float(row.get("C_Bio_Ablauf", c_roh)) / c_roh) * 100.0
+        c_end_rel = (float(row["C_Endwasser"]) / c_roh) * 100.0
+        
+        if is_ozon:
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "1. Rohwasser", "Rel_Konzentration": 100.0})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "2. Vorklärung", "Rel_Konzentration": c_vkl_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "3. Biologie", "Rel_Konzentration": c_bio_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "4. Endwasser (Ozon)", "Rel_Konzentration": c_end_rel})
+        else:
+            c_nach_nf_rel = (float(row.get("C_Nach_NF", row["C_Endwasser"])) / c_roh) * 100.0
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "1. Rohwasser", "Rel_Konzentration": 100.0})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "2. Vorklärung", "Rel_Konzentration": c_vkl_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "3. Biologie", "Rel_Konzentration": c_bio_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "4. Nach Nanofiltration", "Rel_Konzentration": c_nach_nf_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "5. Gereinigtes Endwasser", "Rel_Konzentration": c_end_rel})
+
+    profile_df = pd.DataFrame(profile_rows)
+
+    if not profile_df.empty:
+        base_chart = alt.Chart(profile_df).encode(
+            x=alt.X("Prozessstufe:N", title="Verfahrensstufe", sort=None),
+            y=alt.Y("Rel_Konzentration:Q", title="Verbleibende Konzentration (% vom Rohwasser)", scale=alt.Scale(domain=[0, 105])),
+            color=alt.Color("Substanz:N", title="Substanz", scale=alt.Scale(scheme="category10")),
+            tooltip=[
+                alt.Tooltip("Substanz:N", title="Substanz"),
+                alt.Tooltip("Prozessstufe:N", title="Stufe"),
+                alt.Tooltip("Rel_Konzentration:Q", title="Verbleibend", format=".1f", suffix="%")
+            ]
+        )
+
+        lines = base_chart.mark_line(strokeWidth=2.5)
+        points = base_chart.mark_circle(size=70)
+
+        chart = (lines + points).properties(height=420)
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info("Bitte wähle mindestens eine Substanz aus.")
+else:
+    st.info("Keine Substanzen ausgewählt.")
