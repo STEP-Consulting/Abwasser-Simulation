@@ -734,24 +734,12 @@ if not is_ozon:
 st.divider()
 
 # =========================================================
-# 10. MENGENSTRÖME (NF)
+# 11. TABELLE & PLOTLY-DIAGRAMM (Eliminationsverlauf)
 # =========================================================
 
-if not is_ozon:
-    st.header("🔁 Mengenströme")
-    h1, h2, h3, h4 = st.columns(4)
-    h1.metric("Biologie-Zulauf Q_bio", f"{fl['q_bio']:.1f} m³/h")
-    h2.metric("NF-Zulauf Q_NF", f"{fl['q_nf']:.1f} m³/h")
-    h3.metric("Rücklaufstrom Q_rez", f"{fl['q_rez']:.1f} m³/h")
-    h4.metric("Ausgeschl. Konzentrat", f"{fl['q_konz_aus']:.1f} m³/h")
-    st.divider()
+import plotly.graph_objects as go  # Falls noch nicht ganz oben importiert
 
-
-    # =========================================================
-# 11. TABELLE & LINIEN-KONZENTRATIONSPROFIL
-# =========================================================
-
-st.header("📊 Detaillierte Stoffbilanz & Verlauf")
+st.header("📊 Detaillierte Stoffbilanz & Einzelauswertung")
 
 display_cols = ["Substanzname", "Gruppe", "Einheit", "C_Rohwasser", "Bio_Elimination_%"]
 if is_ozon:
@@ -771,64 +759,105 @@ for col in display_df.columns:
 
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-st.subheader("📈 Linien-Konzentrationsprofil über die Reinigungsstufen")
+st.subheader("📈 Stufen- und Eliminationsanalyse (Plotly)")
 
-verfügbare_substanzen = df_res.loc[df_res["Gruppe"] != "Summenparameter", "Substanzname"].tolist()
-ausgewählte_substanzen = st.multiselect(
-    "Substanzen für das Profil auswählen:",
-    options=verfügbare_substanzen,
-    default=["PFOA", "Diclofenac", "Carbamazepin", "Ibuprofen"] if "Diclofenac" in verfügbare_substanzen else verfügbare_substanzen[:3]
+# Auswahl einer einzelnen Substanz für das Diagramm
+substanzen_liste = df_res.loc[df_res["Gruppe"] != "Summenparameter", "Substanzname"].tolist()
+ausgewählte_substanz = st.selectbox(
+    "Wähle eine Substanz für das Detaildiagramm aus:",
+    options=substanzen_liste,
+    index=substanzen_liste.index("PFOA") if "PFOA" in substanzen_liste else 0
 )
 
-if ausgewählte_substanzen:
-    profile_rows = []
-    
-    for _, row in df_res[df_res["Substanzname"].isin(ausgewählte_substanzen)].iterrows():
-        substanz = row["Substanzname"]
-        c_roh = float(row["C_Rohwasser"])
-        
-        if c_roh <= 0:
-            continue
-            
-        c_vkl_rel = (float(row.get("C_Vorklaerung", c_roh)) / c_roh) * 100.0
-        c_bio_rel = (float(row.get("C_Bio_Ablauf", c_roh)) / c_roh) * 100.0
-        c_end_rel = (float(row["C_Endwasser"]) / c_roh) * 100.0
-        
-        if is_ozon:
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "1. Rohwasser", "Rel_Konzentration": 100.0})
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "2. Vorklärung", "Rel_Konzentration": c_vkl_rel})
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "3. Biologie", "Rel_Konzentration": c_bio_rel})
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "4. Endwasser (Ozon)", "Rel_Konzentration": c_end_rel})
-        else:
-            c_nach_nf_rel = (float(row.get("C_Nach_NF", row["C_Endwasser"])) / c_roh) * 100.0
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "1. Rohwasser", "Rel_Konzentration": 100.0})
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "2. Vorklärung", "Rel_Konzentration": c_vkl_rel})
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "3. Biologie", "Rel_Konzentration": c_bio_rel})
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "4. Nach Nanofiltration", "Rel_Konzentration": c_nach_nf_rel})
-            profile_rows.append({"Substanz": substanz, "Prozessstufe": "5. Gereinigtes Endwasser", "Rel_Konzentration": c_end_rel})
+# Daten für die gewählte Substanz filtern
+substanz_row = df_res[df_res["Substanzname"] == ausgewählte_substanz].iloc[0]
 
-    profile_df = pd.DataFrame(profile_rows)
+# Eliminierungsdaten dynamisch je nach Verfahren zusammenstellen
+elimination_data = {}
+elimination_data["1. Biologischer Abbau"] = float(substanz_row["Bio_Elimination_%"])
 
-    if not profile_df.empty:
-        # HINWEIS: Hier von ":N" auf ":O" (Ordinal) geändert, da Linien eine Reihenfolge benötigen!
-        base_chart = alt.Chart(profile_df).encode(
-            x=alt.X("Prozessstufe:O", title="Verfahrensstufe"),
-            y=alt.Y("Rel_Konzentration:Q", title="Verbleibende Konzentration (% vom Rohwasser)", scale=alt.Scale(domain=[0, 105])),
-            color=alt.Color("Substanz:N", title="Substanz", scale=alt.Scale(scheme="category10")),
-            tooltip=[
-                alt.Tooltip("Substanz:N", title="Substanz"),
-                alt.Tooltip("Prozessstufe:O", title="Stufe"),
-                alt.Tooltip("Rel_Konzentration:Q", title="Verbleibend", format=".1f", suffix="%")
-            ]
-        )
-
-        lines = base_chart.mark_line(strokeWidth=2.5)
-        points = base_chart.mark_circle(size=70)
-
-        chart = (lines + points).properties(height=420)
-        st.altair_chart(chart, use_container_width=True)
-    else:
-        st.info("Bitte wähle mindestens eine Substanz aus.")
+if is_ozon:
+    elimination_data["2. Ozonung"] = float(substanz_row["Ozon_Elimination_%"])
 else:
-    st.info("Keine Substanzen ausgewählt.")
+    elimination_data["2. Nanofiltration (Rückhalt)"] = float(substanz_row["R_NF_%"])
+    if aktivieren_gak:
+        elimination_data["3. Produktwasser-GAK"] = float(substanz_row["GAK_Elimination_%"])
+    if aktivieren_konz_gak:
+        elimination_data["4. Konzentrat-GAK"] = float(substanz_row["Konz_GAK_Elimination_%"])
+
+# Gesamte Konzentrationsreduktion als Endwert hinzufügen
+elimination_data["Gesamt-Reduktion"] = float(substanz_row["Konzentrationsreduktion_%"])
+
+# Plotly-Funktion ausführen
+def plot_elimination_chart(data_dict):
+    data_dict = {k: v for k, v in data_dict.items() if v is not None}
+    labels = list(data_dict.keys())
+    values = [max(0, min(100, float(v))) for v in data_dict.values()]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=labels,
+        y=values,
+        marker=dict(
+            color="white",
+            line=dict(color="black", width=1.5)
+        ),
+        text=[f"{v:.1f} %" for v in values],
+        textposition="outside",
+        textfont=dict(color="black", size=13),
+        cliponaxis=False
+    ))
+
+    fig.update_layout(
+        title=f"Eliminationsleistung für <b>{ausgewählte_substanz}</b>",
+        template="plotly_white",
+        height=420,
+        showlegend=False,
+        margin=dict(l=45, r=25, t=65, b=65),
+        xaxis=dict(
+            title=None,
+            showline=True,
+            linecolor="black",
+            tickfont=dict(size=12, color="black"),
+            showgrid=False
+        ),
+        yaxis=dict(
+            title="Elimination [%]",
+            range=[0, 115],
+            dtick=10,
+            showline=True,
+            linecolor="black",
+            gridcolor="#dddddd",
+            zeroline=True,
+            zerolinecolor="black",
+            tickfont=dict(size=11, color="black")
+        ),
+        bargap=0.4,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(family="Arial", color="black")
+    )
+
+    return fig
+
+# Diagramm in Streamlit anzeigen
+fig_plotly = plot_elimination_chart(elimination_data)
+st.plotly_chart(fig_plotly, use_container_width=True)
+
+# =========================================================
+# 10. MENGENSTRÖME (NF)
+# =========================================================
+
+if not is_ozon:
+    st.header("🔁 Mengenströme")
+    h1, h2, h3, h4 = st.columns(4)
+    h1.metric("Biologie-Zulauf Q_bio", f"{fl['q_bio']:.1f} m³/h")
+    h2.metric("NF-Zulauf Q_NF", f"{fl['q_nf']:.1f} m³/h")
+    h3.metric("Rücklaufstrom Q_rez", f"{fl['q_rez']:.1f} m³/h")
+    h4.metric("Ausgeschl. Konzentrat", f"{fl['q_konz_aus']:.1f} m³/h")
+    st.divider()
+
+
+
 
