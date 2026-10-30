@@ -242,7 +242,7 @@ except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 # =========================================================
-# 4. DYNAMISCHES FLIEßBILD (SAUBER ENTZERRTES SVG)
+# 4. DYNAMISCHES FLIEßBILD (SAUBER VERBUNDENE HAUPTLEITUNG)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
@@ -265,7 +265,7 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         """
 
     parts.append("""
-    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1150 360" preserveAspectRatio="xMidYMid meet" role="img">
+    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1180 360" preserveAspectRatio="xMidYMid meet" role="img">
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
           <path d="M0,0 L8,4 L0,8 Z" class="arrowhead"/>
@@ -331,50 +331,35 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         parts.append(line([(595, 140), (595, 240), (185, 240), (185, 125), (225, 125)], arrow=True))
         parts.append(text(390, 228, "Konzentrat-Rückführung (Biologie)", "label"))
 
-        # Bestimmung des Einmündungspunkts für den gereinigten Konzentrat-Strom
-        # Wenn Produkt-GAK aktiv ist, mündet Konz-GAK HINTER der GAK (x=905) ein, sonst nach NF (x=815)
-        join_x = 905 if aktivieren_gak else 815
+        # Fortlaufender Hauptstrom-Pfad ab NF-Ausgang (x = 655)
+        current_x = 655
 
-        # Konzentrat-GAK (Restkonzentrat-Teilstrom)
+        # 1. Optionale Produktwasser-GAK
+        if aktivieren_gak:
+            parts.append(text(825, 15, "Produktwasser-GAK", "subtitle"))
+            parts.append(line([(current_x, 100), (775, 100)], arrow=True))
+            parts.append(box(775, 70, 100, 60, "GAK"))
+            current_x = 875
+        
+        # Berechne den Einmündungspunkt für die Konzentrat-GAK dynamisch
+        join_x = current_x + 50 if aktivieren_konz_gak else current_x
+
+        # 2. Optionale Konzentrat-GAK (Teilstrom-Reinigung & Einmündung)
         if aktivieren_konz_gak:
             parts.append(line([(630, 140), (630, 185), (680, 185)], arrow=True))
             parts.append(box(680, 160, 100, 50, "Konz-GAK"))
-            parts.append(line([(780, 185), (join_x, 185), (join_x, 100), (join_x + 20, 100)], arrow=True))
+            parts.append(line([(780, 185), (join_x, 185), (join_x, 100)], arrow=True))
             parts.append(f'<circle cx="{join_x}" cy="100" r="3.5" class="junction"/>')
-            parts.append(text(join_x - 45, 173, "Gereinigter Konzentrat-Strom", "label"))
-            out_start_x = join_x + 20
-        else:
-            out_start_x = None
+            parts.append(text(join_x - 55, 173, "Gereinigter Konzentrat-Strom", "label"))
+            current_x = join_x
 
-        if aktivieren_gak:
-            parts.append(text(825, 15, "Produktwasser-GAK", "subtitle"))
-            parts.append(line([(655, 100), (775, 100)], arrow=True))
-            parts.append(box(775, 70, 100, 60, "GAK"))
-            if not aktivieren_konz_gak:
-                parts.append(line([(875, 100), (920, 100)], arrow=True))
-                out_start_x = 920
-        else:
-            if not aktivieren_konz_gak:
-                parts.append(line([(655, 100), (920, 100)], arrow=True))
-                out_start_x = 920
-
-        final_x = out_start_x if out_start_x else (925 if aktivieren_konz_gak else 920)
-        parts.append(line([(final_x - 20 if aktivieren_konz_gak else final_x, 100), (final_x + 50, 100)], arrow=True))
-        parts.append(text(final_x + 65, 94, "Gereinigtes", anchor="start"))
-        parts.append(text(final_x + 65, 111, "Endwasser", anchor="start"))
+        # Durchgehender Hauptstrom zum Endwasser
+        parts.append(line([(current_x, 100), (current_x + 60, 100)], arrow=True))
+        parts.append(text(current_x + 75, 94, "Gereinigtes", anchor="start"))
+        parts.append(text(current_x + 75, 111, "Endwasser", anchor="start"))
 
     parts.append("</svg>")
     return "".join(parts)
-
-svg_schema = build_process_svg(is_ozon=is_ozon, has_bypass=has_bypass, aktivieren_gak=aktivieren_gak, aktivieren_konz_gak=aktivieren_konz_gak)
-html_schema = f"""
-<div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
-    <div style="min-width: 820px;">{svg_schema}</div>
-</div>
-"""
-components.html(html_schema, height=360, scrolling=False)
-st.divider()
-
 # =========================================================
 # 5. ZULAUFKONZENTRATIONEN
 # =========================================================
