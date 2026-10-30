@@ -260,7 +260,7 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         """
 
     parts.append("""
-    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1180 360" preserveAspectRatio="xMidYMid meet" role="img">
+    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1280 380" preserveAspectRatio="xMidYMid meet" role="img">
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
           <path d="M0,0 L8,4 L0,8 Z" class="arrowhead"/>
@@ -278,7 +278,7 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
       </style>
     """)
 
-    # Vorklärung (Lamellen) & Einlauf
+    # Vorklärung & Einlauf
     parts.append(text(130, 15, "Vorklärung", "subtitle"))
     parts.append(text(12, 91, "Kommunales", anchor="start"))
     parts.append(text(12, 108, "Abwasser", anchor="start"))
@@ -321,56 +321,46 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         <line x1="535" y1="61" x2="654" y2="139" stroke="#000" stroke-width="1.8"/>
         """)
 
-        # Konzentrat-Rückführung in die Biologie (unten geführt)
-        parts.append(line([(595, 140), (595, 240), (185, 240), (185, 125), (225, 125)], arrow=True))
-        parts.append(text(390, 228, "Konzentrat-Rückführung (Biologie)", "label"))
+        # Konzentrat-Rückführung in die Biologie (unten links)
+        parts.append(line([(595, 140), (595, 230), (185, 230), (185, 125), (225, 125)], arrow=True))
+        parts.append(text(390, 218, "Konzentrat-Rückführung (Biologie)", "label"))
 
         current_x = 655
 
-        # 1. Optionale Produktwasser-GAK (Polishing)
+        # 1. Optionale Produktwasser-GAK
         if aktivieren_gak:
-            parts.append(text(825, 15, "Produktwasser-GAK", "subtitle"))
-            parts.append(line([(current_x, 100), (775, 100)], arrow=True))
-            parts.append(box(775, 70, 100, 60, "GAK"))
-            current_x = 875
+            parts.append(text(800, 15, "Produktwasser-GAK", "subtitle"))
+            parts.append(line([(current_x, 100), (745, 100)], arrow=True))
+            parts.append(box(745, 70, 100, 60, "GAK"))
+            current_x = 845
 
-        # 2. Konzentrat-Management (Abzug aus NF-Unterschicht)
+        # 2. Hauptstrom-Austritt vor Vermischung
+        main_stream_end_x = current_x + 50
+        parts.append(line([(current_x, 100), (main_stream_end_x, 100)], arrow=False))
+
+        # 3. Konzentrat-GAK Management (Unten geführt mit echtem Wiedereintritt)
         if aktivieren_konz_gak:
-            parts.append(line([(630, 140), (630, 185), (680, 185)], arrow=True))
-            parts.append(box(680, 160, 100, 50, "Konz-GAK"))
+            parts.append(text(780, 275, "Konzentrat-GAK", "subtitle"))
+            # Vom NF-Konzentrat (unten) runter zur Konz-GAK
+            parts.append(line([(630, 140), (630, 260), (730, 260)], arrow=True))
+            parts.append(box(730, 230, 110, 60, "Konz-GAK"))
             
-            join_x = current_x + 50
-            parts.append(line([(780, 185), (join_x, 185), (join_x, 100)], arrow=True))
-            parts.append(f'<circle cx="{join_x}" cy="100" r="3.5" class="junction"/>')
-            parts.append(text(join_x - 55, 173, "Gereinigter Konzentrat-Strom", "label"))
-            current_x = join_x
+            # Von Konz-GAK nach oben zum T-Stück im Hauptstrom
+            parts.append(line([(840, 260), (main_stream_end_x, 260), (main_stream_end_x, 100)], arrow=True))
+            parts.append(f'<circle cx="{main_stream_end_x}" cy="100" r="3.5" class="junction"/>')
+            parts.append(text(main_stream_end_x - 70, 248, "Gereinigtes Konzentrat", "label"))
         else:
-            parts.append(line([(630, 140), (630, 185), (780, 185)], arrow=True))
-            parts.append(text(705, 173, "Konzentrat-Abzugstrom", "label"))
+            # Nur direkter Abzug nach unten
+            parts.append(line([(630, 140), (630, 260), (750, 260)], arrow=True))
+            parts.append(text(810, 248, "Konzentrat-Abzugstrom", "label", "start"))
 
-        # Durchgehender Hauptstrom zum Endwasser
-        parts.append(line([(current_x, 100), (current_x + 60, 100)], arrow=True))
-        parts.append(text(current_x + 75, 111, "Gereinigtes", anchor="start"))
-        parts.append(text(current_x + 75, 130, "Endwasser", anchor="start"))
+        # Durchgehender Endwasser-Auslass
+        parts.append(line([(main_stream_end_x, 100), (main_stream_end_x + 70, 100)], arrow=True))
+        parts.append(text(main_stream_end_x + 85, 94, "Gereinigtes", anchor="start"))
+        parts.append(text(main_stream_end_x + 85, 111, "Endwasser", anchor="start"))
 
     parts.append("</svg>")
     return "".join(parts)
-
-svg_schema = build_process_svg(
-    is_ozon=is_ozon,
-    has_bypass=has_bypass,
-    aktivieren_gak=aktivieren_gak,
-    aktivieren_konz_gak=aktivieren_konz_gak
-)
-
-html_schema = f"""
-<div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
-    <div style="min-width: 820px;">{svg_schema}</div>
-</div>
-"""
-components.html(html_schema, height=360, scrolling=False)
-st.divider()
-
 # =========================================================
 # 5. ZULAUFKONZENTRATIONEN
 # =========================================================
