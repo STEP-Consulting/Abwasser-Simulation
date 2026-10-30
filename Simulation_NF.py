@@ -15,6 +15,9 @@ import altair as alt
 from scipy.stats import lognorm
 from html import escape
 
+
+
+
 # =========================================================
 # 1. STREAMLIT-KONFIGURATION & PASSWORDSCHUTZ
 # =========================================================
@@ -237,15 +240,23 @@ except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 
-def build_process_svg(
-    is_ozon,
-    has_bypass,
-    aktivieren_gak,
-    aktivieren_konz_gak,
-    recycle_fraction=0.0,
-    bypass_fraction=0.0
-):
-    import html
+
+svg_schema = build_process_svg(
+    is_ozon=is_ozon,
+    has_bypass=has_bypass,
+    aktivieren_gak=aktivieren_gak,
+    aktivieren_konz_gak=aktivieren_konz_gak,
+    recycle_fraction=recycle_fraction,
+    bypass_fraction=bypass_fraction
+)
+
+import streamlit.components.v1 as components
+
+components.html(
+    svg_schema,
+    height=490,
+    scrolling=False
+)
 
     # Prozentwerte direkt aus den Sidebar-Einstellungen
     recycle_percent = recycle_fraction * 100
