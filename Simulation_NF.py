@@ -2,10 +2,20 @@
 """
 Integrierte Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
 1. Bestandssystem: Biologie + Ozonung
-2. Advanced System: Nanofiltration mit Konzentrat-GAK & Produkt-GAK 
-   - Exaktes Schwarz-Weiß-Design
-   - Saubere, übersichtliche Leitungsführung ohne Linien-Überschneidungen
+2. Advanced System: Nanofiltration mit Konzentrat-Rückführung, Produkt-GAK und Konzentrat-GAK
+
+Version 5 (Korrekturen gegenüber v4/Eigenversion):
+- Kreislauf wieder geschlossen gelöst (statt 15 Iterationen), inkl. E_rez für CSB
+- Frachtbilanz ohne Doppelzählung des Konzentrats bei aktiver Konzentrat-GAK
+- Konzentrat-GAK mit eigenem Matrix-Faktor (DOC im Konzentrat aufkonzentriert)
+- GAK-Elimination wahlweise als Mittelwert über die Standzeit statt Momentaufnahme
+- Energie/Kohle: nur die tatsächlich durchströmten Ströme, Bezug auf Q_Zulauf
+- Fließbild: saubere Verzweigung, Mischpunkt hinter Konz-GAK, Bypass vor der Produkt-GAK
+- Ozon-Diagramm: C_Bio_Ablauf wird wieder übergeben
+- Passwort aus st.secrets statt im Quelltext
 """
+
+import hmac
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -16,7 +26,7 @@ from scipy.stats import lognorm
 from html import escape
 
 # =========================================================
-# 1. STREAMLIT-KONFIGURATION & PASSWORDSCHUTZ
+# 1. STREAMLIT-KONFIGURATION & PASSWORTSCHUTZ
 # =========================================================
 
 st.set_page_config(
@@ -25,26 +35,37 @@ st.set_page_config(
     layout="wide"
 )
 
-PASSWORD = "Passwort"  # Hier dein Wunschpasswort eintragen
+
+def _get_app_password():
+    """Passwort aus .streamlit/secrets.toml bzw. den Secrets der Hosting-Plattform (Schlüssel APP_PASSWORD)."""
+    try:
+        return st.secrets["APP_PASSWORD"]
+    except Exception:
+        return None
+
 
 def check_password():
     """Gibt True zurück, wenn das Passwort korrekt eingegeben wurde."""
-    if "password_correct" not in st.session_state:
-        st.session_state["password_correct"] = False
-
-    if st.session_state["password_correct"]:
+    if st.session_state.get("password_correct", False):
         return True
+
+    erwartet = _get_app_password()
+    if erwartet is None:
+        st.error("Es ist kein Passwort konfiguriert. Bitte APP_PASSWORD in den Streamlit-Secrets "
+                 "(.streamlit/secrets.toml) hinterlegen.")
+        return False
 
     st.subheader("🔒 Passwortgeschützter Bereich")
     pwd = st.text_input("Bitte gib das Passwort ein, um die Simulation zu starten:", type="password")
-    
+
     if st.button("Anmelden"):
-        if pwd == PASSWORD:
+        if hmac.compare_digest(pwd.encode("utf-8"), str(erwartet).encode("utf-8")):
             st.session_state["password_correct"] = True
             st.rerun()
         else:
             st.error("Falsches Passwort!")
     return False
+
 
 if not check_password():
     st.stop()
@@ -56,9 +77,18 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
     ## So funktioniert das Konzept (Konzentrat-GAK & Vermischung)
 
     ### 1. Konzentrat-Management
-    - Ein Teil des NF-Konzentrats wird in die Biologie zurückgeführt.
-    - Der Reststrom des Konzentrats wird über eine **Konzentrat-GAK** gereinigt und hinter der Haupt-/Polishing-Stufe mit dem gereinigten Endwasser **vermischt**.
-    - Das Fließbild zeigt nun die exakte Einmündung hinter den jeweiligen GAK-Stufen ohne Überlappungen in klarem Schwarz-Weiß-Design.
+    - Ein Teil des NF-Konzentrats wird in die Biologie zurückgeführt (stationärer Kreislauf, geschlossen gelöst).
+    - Der Reststrom des Konzentrats wird optional über eine **Konzentrat-GAK** gereinigt und hinter der Produkt-GAK
+      mit dem gereinigten Endwasser **vermischt**. Ohne Konzentrat-GAK verlässt das Konzentrat die Anlage als Abzug.
+
+    ### 2. GAK-Modell
+    - Die Elimination folgt einer Durchbruchskurve in Bettvolumina (BV). Die Standzeit legt fest, bei welchem BV die
+      Kohle getauscht wird. Standardmäßig wird die **mittlere Elimination über die Standzeit** ausgewiesen.
+    - Das Konzentrat enthält deutlich mehr DOC als das Produktwasser. Der Matrix-Faktor der Konzentrat-GAK wird deshalb
+      um die DOC-Aufkonzentrierung der NF verkleinert.
+
+    ### 3. Frachtbilanz
+    - Biologie + Produkt-GAK + Konzentrat-GAK + Konzentrat-Abzug + Endwasser = 100 % der frischen Zulauffracht.
     """)
 
 # =========================================================
@@ -157,12 +187,15 @@ with st.sidebar.expander("🔀 Hydraulik & Mengenströme", expanded=True):
 
 has_bypass = (not is_ozon) and (bypass_fraction > 0.0)
 
+# Standardwerte (werden unten überschrieben, falls die jeweilige Stufe aktiv ist)
+gak_ebct, gak_delta_p, gak_standzeit_tage, doc_faktor = 0.0, 0.0, 0, 0.35
+gak_mittelwert, r_doc = True, 0.90
+
 if is_ozon:
     with st.sidebar.expander("🧪 Ozonung", expanded=True):
         ozon_dosis = st.slider("Ozon-Dosis (mg O₃ / L)", 1.0, 10.0, 4.0, 0.5)
     aktivieren_gak = False
     aktivieren_konz_gak = False
-    gak_ebct, gak_delta_p, gak_standzeit_tage, doc_faktor = 0.0, 0.0, 0, 0.35
 else:
     ozon_dosis = 0.0
 
@@ -178,14 +211,19 @@ if not is_ozon:
     with st.sidebar.expander("🪨 GAK-Polishing & Konzentrat-GAK", expanded=False):
         aktivieren_gak = st.checkbox("Produktwasser-GAK aktivieren", value=False)
         aktivieren_konz_gak = st.checkbox("Konzentrat-GAK (Restkonzentrat-Behandlung & Vermischung)", value=True)
-        
+
         if aktivieren_gak or aktivieren_konz_gak:
             gak_ebct = st.slider("Kontaktzeit EBCT (min)", 5.0, 30.0, 15.0, 1.0)
             gak_delta_p = st.slider("GAK-Druckverlust ΔP (bar)", 0.2, 2.0, 0.6, 0.1)
-            gak_standzeit_tage = st.slider("Filter-Betriebstage (Erschöpfung)", 30, 365, 180, 30)
-            doc_faktor = st.slider("Matrix-Faktor (DOC-Konkurrenz)", 0.1, 0.8, 0.35, 0.05)
-        else:
-            gak_ebct, gak_delta_p, gak_standzeit_tage, doc_faktor = 0.0, 0.0, 0, 0.35
+            gak_standzeit_tage = st.slider("Filter-Standzeit bis zum Kohletausch (Tage)", 30, 365, 180, 30)
+            gak_mittelwert = st.checkbox(
+                "Mittlere Elimination über die Standzeit (statt Momentaufnahme am Standzeitende)", value=True,
+                help="Realistisch ist der Mittelwert über den Zyklus bis zum Kohletausch. Die "
+                     "Momentaufnahme am Ende der Standzeit zeigt den Worst Case.")
+            doc_faktor = st.slider("Matrix-Faktor Produktwasser (DOC-Konkurrenz)", 0.1, 0.8, 0.35, 0.05)
+            if aktivieren_konz_gak:
+                r_doc = st.slider("DOC-Rückhalt der NF (für Konzentrat-GAK)", 0.50, 0.99, 0.90, 0.01,
+                                  help="Bestimmt, wie stark der DOC im Konzentrat aufkonzentriert wird.")
 else:
     recovery, recycle_fraction, mwco, zeta_pot, sigma_poren, delta_p = 0.8, 0.2, 200, -15.0, 0.3, 0.0
 
@@ -198,6 +236,8 @@ with st.sidebar.expander("🧫 Vorklärung & Biologie", expanded=False):
     srt = st.number_input("Schlammalter SRT (Tage)", 0.1, 100.0, 15.0, 1.0)
     x_ts = st.number_input("Trockensubstanz X_TS (kg/m³)", 0.5, 8.0, 3.5, 0.1)
     f_s_csb = st.number_input("Inerter gelöster CSB-Anteil f_S (DWA-A 131)", 0.0, 0.20, 0.05, 0.01)
+    if srt * 24.0 <= hrt_h:
+        st.warning("Schlammalter muss größer als die Aufenthaltszeit sein.")
 
 with st.sidebar.expander("⚖️ Abwasserverordnung (AbwV)", expanded=False):
     groessenklasse = st.selectbox("Anlagengrößenklasse",
@@ -226,7 +266,7 @@ st.sidebar.subheader("📄 Dokumentation")
 try:
     with open("Begleitdokument.pdf", "rb") as pdf_file:
         PDF_BYTE = pdf_file.read()
-    
+
     st.sidebar.download_button(
         label="📥 Begleitdokument öffnen / laden",
         data=PDF_BYTE,
@@ -237,12 +277,43 @@ except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 # =========================================================
-# 4. DYNAMISCHES PROZESSFLIEßBILD (SAUBERES SCHWARZ-WEISS)
+# 4. SIMULATIONSLOGIK: HYDRAULIK (konzentrationsunabhängig)
+# =========================================================
+
+
+def kreislauf_fluesse(q_feed, bypass, Y, r):
+    """Hydraulik des Kreislaufs (Konzentrat-Rückführung in die Biologie).
+    F = Q + Q_rez = Q / (1 - r (1-Y) a), a = 1 - Bypass-Anteil."""
+    Y = min(Y, 0.99)
+    a = 1.0 - bypass
+    q_bio = q_feed / (1.0 - r * (1.0 - Y) * a)
+    q_nf = a * q_bio
+    q_bypass = q_bio - q_nf
+    q_perm = Y * q_nf
+    q_konz_ges = q_nf - q_perm
+    q_rez = r * q_konz_ges
+    q_konz_aus = q_konz_ges - q_rez
+    q_prod = q_perm + q_bypass
+    return dict(a=a, q_bio=q_bio, q_nf=q_nf, q_bypass=q_bypass, q_perm=q_perm,
+                q_konz_ges=q_konz_ges, q_rez=q_rez, q_konz_aus=q_konz_aus, q_prod=q_prod)
+
+
+if is_ozon:
+    fl, q_produkt = None, q_feed
+    hrt_eff_h = hrt_h
+else:
+    fl = kreislauf_fluesse(q_feed, bypass_fraction, recovery, recycle_fraction)
+    q_produkt = fl["q_prod"]
+    hrt_eff_h = hrt_h * q_feed / fl["q_bio"]
+
+# =========================================================
+# 5. DYNAMISCHES PROZESSFLIEßBILD (SCHWARZ-WEISS)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
 
-def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
+
+def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, fl, q_feed):
     parts = []
 
     def text(x, y, label, cls="label", anchor="middle"):
@@ -259,8 +330,11 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         <text x="{x + w / 2}" y="{y + h / 2 + 5}" class="box-label" text-anchor="middle">{escape(label)}</text>
         """
 
+    def junction(x, y):
+        return f'<circle cx="{x}" cy="{y}" r="3.5" class="junction"/>'
+
     parts.append("""
-    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1280 380" preserveAspectRatio="xMidYMid meet" role="img">
+    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1280 310" preserveAspectRatio="xMidYMid meet" role="img">
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
           <path d="M0,0 L8,4 L0,8 Z" class="arrowhead"/>
@@ -278,17 +352,17 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
       </style>
     """)
 
-    # Vorklärung & Einlauf
-    parts.append(text(130, 15, "Vorklärung", "subtitle"))
+    # Einlauf & Vorklärung (mit Umrandung)
+    parts.append(text(150, 15, "Vorklärung", "subtitle"))
     parts.append(text(12, 91, "Kommunales", anchor="start"))
     parts.append(text(12, 108, "Abwasser", anchor="start"))
+    parts.append(text(12, 126, f"Q = {q_feed:.0f} m³/h", "label", "start"))
     parts.append(line([(100, 100), (128, 100)], arrow=True))
-
+    parts.append('<rect x="128" y="72" width="45" height="56" rx="3"/>')
     for i in range(5):
-        x = 130 + i * 7
+        x = 133 + i * 7
         parts.append(f'<line x1="{x}" y1="77" x2="{x + 12}" y2="123" class="pipe"/>')
-
-    parts.append(line([(165, 100), (225, 100)], arrow=True))
+    parts.append(line([(173, 100), (225, 100)], arrow=True))
 
     # Biologie
     parts.append(text(300, 15, "Biologische Reinigung", "subtitle"))
@@ -306,14 +380,13 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
     else:
         parts.append(text(600, 15, "Nanofiltration", "subtitle"))
 
+        # Zulauf zur NF; Bypass-Abzweig bei x=430, Wiedereinmündung VOR der Produkt-GAK bei x=700
+        parts.append(line([(375, 100), (535, 100)], arrow=True))
         if has_bypass:
-            parts.append(line([(375, 100), (430, 100)], arrow=True))
-            parts.append('<circle cx="430" cy="100" r="3.5" class="junction"/>')
-            parts.append(line([(430, 100), (430, 45), (750, 45), (750, 100)], arrow=True))
-            parts.append(text(590, 36, "Bypass-Teilstrom", "subtitle"))
-            parts.append(line([(430, 100), (535, 100)], arrow=True))
-        else:
-            parts.append(line([(375, 100), (535, 100)], arrow=True))
+            parts.append(junction(430, 100))
+            parts.append(line([(430, 100), (430, 45), (700, 45), (700, 100)], arrow=True))
+            parts.append(text(565, 36, f"Bypass ({fl['q_bypass']:.1f} m³/h)", "subtitle"))
+            parts.append(junction(700, 100))
 
         parts.append("""
         <rect x="535" y="60" width="120" height="80" rx="5"/>
@@ -321,61 +394,63 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         <line x1="535" y1="61" x2="654" y2="139" stroke="#000" stroke-width="1.8"/>
         """)
 
-        # Konzentrat-Rückführung in die Biologie (unten links)
-        parts.append(line([(595, 140), (595, 230), (185, 230), (185, 125), (225, 125)], arrow=True))
-        parts.append(text(390, 218, "Konzentrat-Rückführung (Biologie)", "label"))
-
+        # Hauptstrom (Permeat + Bypass) -> optionale Produkt-GAK -> Mischpunkt
         current_x = 655
-
-        # 1. Optionale Produktwasser-GAK
         if aktivieren_gak:
-            parts.append(text(800, 15, "Produktwasser-GAK", "subtitle"))
+            parts.append(text(795, 40, "Produktwasser-GAK", "subtitle"))
             parts.append(line([(current_x, 100), (745, 100)], arrow=True))
             parts.append(box(745, 70, 100, 60, "GAK"))
             current_x = 845
 
-        # 2. Hauptstrom-Austritt vor Vermischung
-        main_stream_end_x = current_x + 50
-        parts.append(line([(current_x, 100), (main_stream_end_x, 100)], arrow=False))
+        mix_x = 900 if aktivieren_konz_gak else current_x + 50
+        parts.append(line([(current_x, 100), (mix_x, 100)], arrow=False))
 
-        # 3. Konzentrat-GAK Management (Unten geführt mit echtem Wiedereintritt)
+        # Konzentratstrom: EIN Abgang aus der NF, Verzweigung in Rückführung und Konzentratbehandlung
+        parts.append(line([(595, 140), (595, 215)], arrow=False))
+        parts.append(junction(595, 215))
+        parts.append(line([(595, 215), (185, 215), (185, 125), (225, 125)], arrow=True))
+        parts.append(text(390, 206, f"Rückführung in Biologie ({fl['q_rez']:.1f} m³/h)", "label"))
+
         if aktivieren_konz_gak:
-            parts.append(text(780, 275, "Konzentrat-GAK", "subtitle"))
-            parts.append(line([(630, 140), (630, 260), (730, 260)], arrow=True))
+            parts.append(text(785, 222, "Konzentrat-GAK", "subtitle"))
+            parts.append(line([(595, 215), (595, 260), (730, 260)], arrow=True))
             parts.append(box(730, 230, 110, 60, "Konz-GAK"))
-            
-            parts.append(line([(840, 260), (main_stream_end_x, 260), (main_stream_end_x, 100)], arrow=True))
-            parts.append(f'<circle cx="{main_stream_end_x}" cy="100" r="3.5" class="junction"/>')
-            parts.append(text(main_stream_end_x - 70, 248, "Gereinigtes Konzentrat", "label"))
+            parts.append(line([(840, 260), (mix_x, 260), (mix_x, 100)], arrow=True))
+            parts.append(junction(mix_x, 100))
+            parts.append(text(mix_x + 8, 200, "Gereinigtes Konzentrat", "label", "start"))
+            parts.append(text(610, 252, f"{fl['q_konz_aus']:.1f} m³/h", "label", "start"))
         else:
-            parts.append(line([(630, 140), (630, 260), (750, 260)], arrow=True))
-            parts.append(text(810, 248, "Konzentrat-Abzugstrom", "label", "start"))
+            parts.append(line([(595, 215), (595, 260), (760, 260)], arrow=True))
+            parts.append(text(770, 264, f"Konzentrat-Abzug ({fl['q_konz_aus']:.1f} m³/h)", "label", "start"))
 
-        # Durchgehender Endwasser-Auslass
-        parts.append(line([(main_stream_end_x, 100), (main_stream_end_x + 70, 100)], arrow=True))
-        parts.append(text(main_stream_end_x + 85, 94, "Gereinigtes", anchor="start"))
-        parts.append(text(main_stream_end_x + 85, 111, "Endwasser", anchor="start"))
+        # Endwasser
+        parts.append(line([(mix_x, 100), (mix_x + 70, 100)], arrow=True))
+        parts.append(text(mix_x + 85, 94, "Gereinigtes", anchor="start"))
+        parts.append(text(mix_x + 85, 111, "Endwasser", anchor="start"))
 
     parts.append("</svg>")
     return "".join(parts)
+
 
 svg_schema = build_process_svg(
     is_ozon=is_ozon,
     has_bypass=has_bypass,
     aktivieren_gak=aktivieren_gak,
-    aktivieren_konz_gak=aktivieren_konz_gak
+    aktivieren_konz_gak=aktivieren_konz_gak,
+    fl=fl,
+    q_feed=q_feed
 )
 
 html_schema = f"""
 <div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
-    <div style="min-width: 820px;">{svg_schema}</div>
+    <div style="min-width: 820px; max-width: 1280px; margin: 0 auto;">{svg_schema}</div>
 </div>
 """
-components.html(html_schema, height=360, scrolling=False)
+components.html(html_schema, height=370, scrolling=False)
 st.divider()
 
 # =========================================================
-# 5. ZULAUFKONZENTRATIONEN
+# 6. ZULAUFKONZENTRATIONEN
 # =========================================================
 
 st.header("🧪 Rohwasser-Zulaufkonzentrationen")
@@ -408,38 +483,23 @@ df = df_stoff.copy()
 df["C_Rohwasser"] = df["Substanzname"].map(st.session_state.c_roh)
 
 # =========================================================
-# 6. SIMULATIONSLOGIK & VERMISCHUNGSLOGIK
+# 7. SIMULATIONSLOGIK: STOFFE
 # =========================================================
 
-def kreislauf_fluesse(q_feed, bypass, Y, r):
-    Y = min(Y, 0.99)
-    a = 1.0 - bypass
-    q_bio = q_feed / (1.0 - r * (1.0 - Y) * a)
-    q_nf = a * q_bio
-    q_bypass = q_bio - q_nf
-    q_perm = Y * q_nf
-    q_konz_ges = q_nf - q_perm
-    q_rez = r * q_konz_ges
-    q_konz_aus = q_konz_ges - q_rez
-    q_prod = q_perm + q_bypass
-    return dict(a=a, q_bio=q_bio, q_nf=q_nf, q_bypass=q_bypass, q_perm=q_perm,
-                q_konz_ges=q_konz_ges, q_rez=q_rez, q_konz_aus=q_konz_aus, q_prod=q_prod)
-
-if is_ozon:
-    fl, q_produkt = None, q_feed
-    hrt_eff_h = hrt_h
-else:
-    fl = kreislauf_fluesse(q_feed, bypass_fraction, recovery, recycle_fraction)
-    q_produkt = fl["q_prod"]
-    hrt_eff_h = hrt_h * q_feed / fl["q_bio"]
 
 def berechne_vorklaerung(row, eta):
     c = float(row["C_Rohwasser"])
     return c * (1.0 - eta) if row["Gruppe"] == "Summenparameter" else c
 
+
 df["C_Vorklaerung"] = df.apply(lambda row: berechne_vorklaerung(row, eta_vorklaerung), axis=1)
 
+
 def berechne_biologie(row, x_ts, srt, hrt_d):
+    """Elimination je Biologie-Durchgang bei Aufenthaltszeit hrt_d (Tage).
+    Sorption (Arvaniti et al. 2014): RESS = X_TS*HRT/SRT, E_sorp = Kd*RESS/(1+Kd*RESS).
+    Abbau (Joss et al. 2006): E_bio = k*X_TS*HRT/(1+k*X_TS*HRT), k in L/(g_TS*d).
+    CSB: DWA-A 131, E = 1 - f_S.  BSB5: vereinfachte SRT-Näherung."""
     c_in = float(row["C_Vorklaerung"])
     kd = float(row["Kd_m3_kg"])
     k_bio = float(row["k_biol_L_gSS_d"])
@@ -467,11 +527,13 @@ def berechne_biologie(row, x_ts, srt, hrt_d):
         "Bio_Abbauanteil_%": e_bio * 100.0
     })
 
+
 bio_eff = df.apply(lambda row: berechne_biologie(row, x_ts, srt, hrt_eff_h / 24.0), axis=1)
 df[["C_Bio_Ablauf", "Bio_Elimination_%", "Bio_Sorptionsanteil_%", "Bio_Abbauanteil_%"]] = bio_eff
 
 bio_ref = df.apply(lambda row: berechne_biologie(row, x_ts, srt, hrt_h / 24.0), axis=1)
 df["C_Bio_Ablauf_ref"] = bio_ref["C_Bio_Ablauf"]
+
 
 def wende_ozon_an(row, dosis):
     substanz = row["Substanzname"]
@@ -498,9 +560,11 @@ def wende_ozon_an(row, dosis):
 
     return c_in, 0.0
 
+
 df["alpha"] = np.where(df["Ladung_z"] < 0, 1.0 / (1.0 + 10.0 ** (df["pKa"] - PH_SYS_FIX)), 0.0)
 df["R_size"] = lognorm.cdf(df["MW"], s=sigma_poren, scale=mwco_median)
 df.loc[df["Gruppe"] == "Summenparameter", "R_size"] = 0.0
+
 
 def get_nf_retention(row):
     if row["Gruppe"] == "Summenparameter":
@@ -510,9 +574,35 @@ def get_nf_retention(row):
     p_charge = float(np.clip(1.0 - charge_factor, 0.0, 1.0))
     return float(np.clip(1.0 - (p_size * p_charge), 0.0, 0.99))
 
+
 df["R_NF"] = df.apply(get_nf_retention, axis=1)
 
-def wende_gak_an(c_in, row, ebct, q_ref_m3h, betriebstage, doc_faktor):
+
+def kreislauf_stoffstrom(c_vkl, E, R, Y, r, q_feed, fl, E_rez=None):
+    """Stationäre Konzentrationen im Kreislauf (geschlossene Lösung, keine Iteration).
+    E = Elimination der frischen Fracht, E_rez = Elimination der zurückgeführten Fracht
+    (CSB: 0, weil der zurückgeführte CSB bereits inerter gelöster CSB ist).
+    c_bio = (1-E) c_vkl (Q/F) / (1 - (1-E_rez) r a (1 - Y cpf)),  c_konz = c_bio (1 - Y cpf)/(1 - Y)
+    Rückgabe: c_zulauf_bio, c_bio_ablauf, c_permeat, c_konzentrat, c_produkt (Permeat + Bypass)."""
+    if E_rez is None:
+        E_rez = E
+    Y = min(Y, 0.99)
+    cpf = 1.0 - float(np.clip(R, 0.0, 1.0))
+    q_ratio = q_feed / fl["q_bio"]
+    nenner = 1.0 - (1.0 - E_rez) * r * fl["a"] * (1.0 - Y * cpf)
+
+    c_bio = (1.0 - E) * c_vkl * q_ratio / nenner
+    c_perm = c_bio * cpf
+    c_konz = c_bio * (1.0 - Y * cpf) / (1.0 - Y)
+    c_prod = (fl["q_perm"] * c_perm + fl["q_bypass"] * c_bio) / fl["q_prod"]
+    c_zu_bio = (q_feed * c_vkl + fl["q_rez"] * c_konz) / fl["q_bio"]
+    return c_zu_bio, c_bio, c_perm, c_konz, c_prod
+
+
+def wende_gak_an(c_in, row, ebct, betriebstage, matrix_faktor, mittelwert=True):
+    """GAK-Durchbruchsmodell (logistisch in Bettvolumina).
+    Bettvolumina bis zum Kohletausch: BV = 1440 * Standzeit[d] / EBCT[min] (Durchfluss kürzt sich heraus).
+    mittelwert=True: mittlere Elimination über 0..BV (Zyklusmittel), sonst Momentaufnahme bei BV."""
     if row["Gruppe"] == "Summenparameter" or pd.isna(c_in) or c_in <= 0:
         return (c_in if not pd.isna(c_in) else 0.0), 0.0
 
@@ -523,9 +613,7 @@ def wende_gak_an(c_in, row, ebct, q_ref_m3h, betriebstage, doc_faktor):
     if kf <= 0.0:
         return c_in, 0.0
 
-    q_ref = q_ref_m3h if q_ref_m3h > 0 else 1.0
-    v_filter_m3 = q_ref * (ebct / 60.0)
-    bed_volumes = (q_ref * 24.0 * betriebstage) / v_filter_m3
+    bed_volumes = 1440.0 * betriebstage / ebct
 
     if substanz in ["TFA", "PFBS"]:
         bv_50_base = 4000.0
@@ -534,15 +622,36 @@ def wende_gak_an(c_in, row, ebct, q_ref_m3h, betriebstage, doc_faktor):
     else:
         bv_50_base = max(3000.0, kf * 600.0)
 
-    bv_50_eff = bv_50_base * doc_faktor
+    bv_50_eff = bv_50_base * matrix_faktor
     steepness = 3.5
-
-    breakthrough_ratio = 1.0 / (1.0 + np.exp(-steepness * ((bed_volumes / bv_50_eff) - 1.0)))
     max_rem = 0.98 if gruppe == "PFAS" else 0.99
-    rem = max_rem * (1.0 - breakthrough_ratio)
+
+    def rem_bei_bv(bv):
+        durchbruch = 1.0 / (1.0 + np.exp(-steepness * ((bv / bv_50_eff) - 1.0)))
+        return max_rem * (1.0 - durchbruch)
+
+    if mittelwert:
+        rem = float(np.mean(rem_bei_bv(np.linspace(0.0, bed_volumes, 400))))
+    else:
+        rem = float(rem_bei_bv(bed_volumes))
+
     rem = float(np.clip(rem, 0.0, 0.99))
     c_out = max(0.0, float(c_in * (1.0 - rem)))
     return c_out, rem * 100.0
+
+
+# DOC-Aufkonzentrierung im NF-Konzentrat -> kleinerer Matrix-Faktor der Konzentrat-GAK
+if (not is_ozon) and aktivieren_konz_gak:
+    y_c = min(recovery, 0.99)
+    aufkonz_doc = (1.0 - y_c * (1.0 - r_doc)) / (1.0 - y_c)
+    doc_faktor_konz = max(0.02, doc_faktor / aufkonz_doc)
+else:
+    aufkonz_doc = 1.0
+    doc_faktor_konz = doc_faktor
+
+# =========================================================
+# 8. HAUPTSCHLEIFE
+# =========================================================
 
 result_rows = []
 for _, row in df.iterrows():
@@ -552,12 +661,9 @@ for _, row in df.iterrows():
     c_bio_ref = float(row["C_Bio_Ablauf_ref"])
 
     nf_elim_pct = gak_elim_pct = ozon_elim_pct = konz_gak_elim_pct = 0.0
-    c_konz = np.nan
-    c_konz_gac = np.nan
-    f_bio = f_konz = f_gak = f_konz_gak = 0.0
+    f_bio = f_gak = f_konz_gak = f_abzug = f_end = 0.0
     akkum = 1.0
-
-    fracht_in = q_feed * c_vkl
+    fracht_in = q_feed * c_vkl      # frische Fracht in die Biologie (nach Vorklärung)
 
     if is_ozon:
         c_bio = float(row["C_Bio_Ablauf"])
@@ -566,57 +672,55 @@ for _, row in df.iterrows():
         r_nf = float(row["R_NF"])
         nf_elim_pct = r_nf * 100.0
         E_rez = 0.0 if row["Substanzname"] == "CSB" else E
-        
-        c_bio = c_vkl * (1.0 - E)
-        for _ in range(15):
-            c_perm = c_bio * (1.0 - r_nf)
-            c_konz = c_bio * (1.0 - recovery * (1.0 - r_nf)) / (1.0 - recovery)
-            c_zu_bio = (q_feed * c_vkl + fl["q_rez"] * c_konz) / fl["q_bio"]
-            c_bio = c_zu_bio * (1.0 - E)
-            
-        akkum = (c_bio / c_bio_ref) if c_bio_ref > 0 else 1.0
-        c_nach_nf = (fl["q_perm"] * c_perm + fl["q_bypass"] * c_bio) / fl["q_prod"]
 
+        c_zu_bio, c_bio, c_perm, c_konz, c_nach_nf = kreislauf_stoffstrom(
+            c_vkl, E, r_nf, recovery, recycle_fraction, q_feed, fl, E_rez=E_rez)
+        akkum = (c_bio / c_bio_ref) if c_bio_ref > 0 else 1.0
+
+        # Produktwasser-GAK (Permeat + Bypass)
         if aktivieren_gak:
-            c_prod_gac, gak_elim_pct = wende_gak_an(c_nach_nf, row, gak_ebct, q_produkt, gak_standzeit_tage, doc_faktor)
+            c_prod_gac, gak_elim_pct = wende_gak_an(c_nach_nf, row, gak_ebct, gak_standzeit_tage,
+                                                    doc_faktor, gak_mittelwert)
         else:
             c_prod_gac = c_nach_nf
 
+        # Konzentrat-GAK (nur der ausgeschleuste Konzentratstrom)
+        q_k = fl["q_konz_aus"]
         if aktivieren_konz_gak:
-            c_konz_gac, konz_gak_elim_pct = wende_gak_an(c_konz, row, gak_ebct, fl["q_konz_aus"], gak_standzeit_tage, doc_faktor)
+            c_konz_gac, konz_gak_elim_pct = wende_gak_an(c_konz, row, gak_ebct, gak_standzeit_tage,
+                                                         doc_faktor_konz, gak_mittelwert)
+            q_ges_end = q_produkt + q_k
+            c_final = (q_produkt * c_prod_gac + q_k * c_konz_gac) / q_ges_end
         else:
             c_konz_gac = c_konz
-
-        q_ges_end = q_produkt + (fl["q_konz_aus"] if aktivieren_konz_gak else 0.0)
-        if q_ges_end > 0:
-            c_final = (q_produkt * c_prod_gac + (fl["q_konz_aus"] if aktivieren_konz_gak else 0.0) * c_konz_gac) / q_ges_end
-        else:
+            q_ges_end = q_produkt
             c_final = c_prod_gac
 
         if fracht_in > 0:
-            f_bio = (E * (q_feed * c_vkl + fl["q_rez"] * c_konz)) / fracht_in * 100.0
-            f_konz = (fl["q_konz_aus"] * c_konz_gac) / fracht_in * 100.0
-            if aktivieren_konz_gak and c_konz > 0:
-                f_konz_gak = (fl["q_konz_aus"] * (c_konz - c_konz_gac)) / fracht_in * 100.0
-            f_gak = (q_produkt * (c_nach_nf - c_prod_gac)) / fracht_in * 100.0
-
-    f_prod = (q_ges_end * c_final / fracht_in * 100.0) if (not is_ozon and fracht_in > 0) else ((q_feed * c_final / fracht_in * 100.0) if fracht_in > 0 else 0.0)
+            f_bio = (E * q_feed * c_vkl + E_rez * fl["q_rez"] * c_konz) / fracht_in * 100.0
+            f_gak = q_produkt * (c_nach_nf - c_prod_gac) / fracht_in * 100.0
+            if aktivieren_konz_gak:
+                f_konz_gak = q_k * (c_konz - c_konz_gac) / fracht_in * 100.0
+            else:
+                f_abzug = q_k * c_konz / fracht_in * 100.0     # Konzentrat verlässt die Anlage
+            f_end = q_ges_end * c_final / fracht_in * 100.0
 
     if is_ozon:
         f_bilanz = np.nan
     else:
-        f_bilanz = (f_bio + f_konz + f_konz_gak + f_gak + (q_ges_end * c_final / fracht_in * 100.0)) if fracht_in > 0 else 100.0
+        f_bilanz = (f_bio + f_gak + f_konz_gak + f_abzug + f_end) if fracht_in > 0 else 100.0
 
     konz_red = (1.0 - (c_final / c_roh)) * 100.0 if c_roh > 0 else np.nan
 
     result_rows.append({
         "Substanzname": row["Substanzname"], "Gruppe": row["Gruppe"], "Einheit": row["Einheit"],
         "C_Rohwasser": c_roh, "Bio_Elimination_%": row["Bio_Elimination_%"],
-        "Akkumulation_Bio_x": akkum,
-        "R_NF_%": nf_elim_pct, "Ozon_Elimination_%": ozon_elim_pct, "GAK_Elimination_%": gak_elim_pct,
+        "C_Bio_Ablauf": c_bio, "Akkumulation_Bio_x": akkum,
+        "R_NF_%": nf_elim_pct, "Ozon_Elimination_%": ozon_elim_pct,
+        "GAK_Elimination_%": gak_elim_pct, "Konz_GAK_Elimination_%": konz_gak_elim_pct,
         "C_Endwasser": c_final,
-        "Fracht_Biologie_%": f_bio, "Fracht_Produkt_%": f_prod,
-        "Fracht_Konzentrat_%": f_konz, "Fracht_Konz_GAK_%": f_konz_gak, "Fracht_GAK_%": f_gak,
+        "Fracht_Biologie_%": f_bio, "Fracht_Prod_GAK_%": f_gak, "Fracht_Konz_GAK_%": f_konz_gak,
+        "Fracht_Konz_Abzug_%": f_abzug, "Fracht_Endwasser_%": f_end,
         "Bilanzsumme_%": f_bilanz,
         "Konzentrationsreduktion_%": konz_red
     })
@@ -624,15 +728,17 @@ for _, row in df.iterrows():
 df_res = pd.DataFrame(result_rows)
 
 # =========================================================
-# 7. DASHBOARD: KERN-METRIKEN
+# 9. DASHBOARD: KERN-METRIKEN
 # =========================================================
 
-verfahren_label = "Bestandssystem (Ozonung)" if is_ozon else f"Nanofiltration (Bypass: {int(bypass_fraction*100)}%)"
+verfahren_label = "Bestandssystem (Ozonung)" if is_ozon else f"Nanofiltration (Bypass: {int(bypass_fraction * 100)} %)"
 st.header(f"🎯 Zielwertüberwachung: {verfahren_label}")
+
 
 def get_concentration(stoff):
     values = df_res.loc[df_res["Substanzname"] == stoff, "C_Endwasser"].values
     return float(values[0]) if len(values) else np.nan
+
 
 csb_end = get_concentration("CSB")
 bsb_end = get_concentration("BSB5")
@@ -658,15 +764,35 @@ z5.metric("Ø Arzneimittel-Red.", f"{avg_phac_elim:.1f}%")
 
 if not is_ozon:
     abw = (df_res["Bilanzsumme_%"] - 100.0).abs().max()
-    if abw > 1e-4:
-        st.warning(f"Massenbilanz-Abweichung: {abw:.3g} %")
+    if abw > 1e-6:
+        st.error(f"Massenbilanz nicht geschlossen (max. Abweichung {abw:.3g} %)")
     else:
-        st.caption("✅ Frachtbilanz perfekt geschlossen (100.0 %).")
+        st.caption("✅ Frachtbilanz geschlossen (Biologie + GAK-Stufen + Konzentrat-Abzug + Endwasser = 100 %).")
+    if not aktivieren_konz_gak:
+        st.caption("ℹ️ Ohne Konzentrat-GAK verlässt das Konzentrat die Anlage als Abzug. Die angezeigten "
+                   "Endwasserwerte beziehen sich dann nur auf das Produktwasser.")
 
 st.divider()
 
 # =========================================================
-# 8. KOSTENBILANZ & ENERGIEBEDARFS-BILANZ
+# 10. MENGENSTRÖME (NF)
+# =========================================================
+
+if not is_ozon:
+    st.header("🔁 Mengenströme")
+    h1, h2, h3, h4 = st.columns(4)
+    h1.metric("Produktwasser", f"{fl['q_prod']:.1f} m³/h")
+    h2.metric("Rückführung in Biologie", f"{fl['q_rez']:.1f} m³/h")
+    h3.metric("Konzentrat (Abzug / Konz-GAK)", f"{fl['q_konz_aus']:.1f} m³/h")
+    h4.metric("Biologie-Zulauf gesamt", f"{fl['q_bio']:.1f} m³/h",
+              delta=f"effektive HRT {hrt_eff_h:.1f} h", delta_color="off")
+    if aktivieren_konz_gak:
+        st.caption(f"Konzentrat-GAK: DOC-Aufkonzentrierung im Konzentrat ca. ×{aufkonz_doc:.1f}, "
+                   f"daher Matrix-Faktor {doc_faktor_konz:.3f} (Produktwasser: {doc_faktor:.2f}).")
+    st.divider()
+
+# =========================================================
+# 11. KOSTEN- & ENERGIEBILANZ
 # =========================================================
 
 if is_ozon:
@@ -688,23 +814,29 @@ if not is_ozon:
     leistungsbedarf_nf_kw = fl["q_perm"] * sec_permeat
     jahresenergie_nf_kwh = leistungsbedarf_nf_kw * BETRIEBSSTUNDEN_JAHR
 
-    spez_energie_gesamt_m3 = (leistungsbedarf_nf_kw / q_produkt) if q_produkt > 0 else 0.0
+    # Nur tatsächlich durchströmte GAK-Ströme
+    q_gak_ref = (q_produkt if aktivieren_gak else 0.0) + (fl["q_konz_aus"] if aktivieren_konz_gak else 0.0)
+    leistungsbedarf_gak_kw = 0.0
+    jahresenergie_gak_kwh = 0.0
+    if q_gak_ref > 0:
+        sec_gak = gak_delta_p / (36.0 * ETA_PUMPE)
+        leistungsbedarf_gak_kw = q_gak_ref * sec_gak
+        jahresenergie_gak_kwh = leistungsbedarf_gak_kw * BETRIEBSSTUNDEN_JAHR
+
+    # Bezug: behandeltes Abwasser (Q_Zulauf), vergleichbar mit der Ozonung
+    spez_energie_gesamt_m3 = (leistungsbedarf_nf_kw + leistungsbedarf_gak_kw) / q_feed
 
     e1, e2, e3 = st.columns(3)
     e1.metric("Spez. Energiebedarf (NF)", f"{sec_permeat:.2f} kWh/m³ Permeat")
     e2.metric("Elektrische Leistung (NF)", f"{leistungsbedarf_nf_kw:.1f} kW")
     e3.metric("Jahresenergie (NF)", f"{jahresenergie_nf_kwh:,.0f} kWh/a".replace(",", "."))
 
-    if aktivieren_gak or aktivieren_konz_gak:
-        sec_gak = gak_delta_p / (36.0 * ETA_PUMPE)
-        q_gak_ref = q_produkt + (fl["q_konz_aus"] if aktivieren_konz_gak else 0.0)
-        leistungsbedarf_gak_kw = q_gak_ref * sec_gak
-        jahresenergie_gak_kwh = leistungsbedarf_gak_kw * BETRIEBSSTUNDEN_JAHR
-        spez_energie_gesamt_m3 += (leistungsbedarf_gak_kw / q_produkt)
-        st.metric("Gesamtenergie NF + GAK", f"{jahresenergie_nf_kwh + jahresenergie_gak_kwh:,.0f} kWh/a".replace(",", "."))
+    if q_gak_ref > 0:
+        st.metric("Gesamtenergie NF + GAK",
+                  f"{jahresenergie_nf_kwh + jahresenergie_gak_kwh:,.0f} kWh/a".replace(",", "."))
 
         bv_wechsel = 1440.0 * gak_standzeit_tage / gak_ebct
-        gak_spez_verbrauch = GAK_SCHUETTDICHTE_KG_M3 * 1000.0 / bv_wechsel
+        gak_spez_verbrauch = GAK_SCHUETTDICHTE_KG_M3 * 1000.0 / bv_wechsel          # g Kohle je m³ GAK-Durchsatz
         gak_jahresbedarf_t = gak_spez_verbrauch * q_gak_ref * BETRIEBSSTUNDEN_JAHR / 1.0e6
         g1, g2 = st.columns(2)
         g1.metric("Spez. Kohleverbrauch (berechnet)", f"{gak_spez_verbrauch:.1f} g/m³")
@@ -713,7 +845,7 @@ if not is_ozon:
     st.markdown("---")
     st.subheader("📊 Energetischer Vergleich zur Ozonung (Großmaßstab)")
     c_ben1, c_ben2 = st.columns(2)
-    c_ben1.metric("Spez. Energiebedarf Advanced System", f"{spez_energie_gesamt_m3:.3f} kWh/m³")
+    c_ben1.metric("Spez. Energiebedarf Advanced System (je m³ Zulauf)", f"{spez_energie_gesamt_m3:.3f} kWh/m³")
     c_ben2.metric("Vergleichswert Ozonung KA Aachen-Sörs (2018)", f"{ENERGIE_BENCHMARK_AACHEN:.3f} kWh/m³")
 
 else:
@@ -725,7 +857,7 @@ else:
 st.divider()
 
 # =========================================================
-# 9. TABELLE & DIAGRAMME
+# 12. TABELLE & DIAGRAMME
 # =========================================================
 
 st.header("📊 Detaillierte Stoffbilanz")
@@ -734,9 +866,11 @@ display_cols = ["Substanzname", "Gruppe", "Einheit", "C_Rohwasser", "Bio_Elimina
 if is_ozon:
     display_cols.append("Ozon_Elimination_%")
 else:
-    display_cols.extend(["R_NF_%"])
+    display_cols.append("R_NF_%")
     if aktivieren_gak:
         display_cols.append("GAK_Elimination_%")
+    if aktivieren_konz_gak:
+        display_cols.append("Konz_GAK_Elimination_%")
 display_cols.extend(["C_Endwasser", "Konzentrationsreduktion_%"])
 
 display_df = df_res[display_cols].copy()
@@ -746,34 +880,47 @@ for col in display_df.columns:
 
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
+if not is_ozon:
+    with st.expander("🔎 Bilanz-Details (Frachtanteile, Akkumulation)", expanded=False):
+        detail_cols = ["Substanzname", "C_Bio_Ablauf", "Akkumulation_Bio_x", "Fracht_Biologie_%",
+                       "Fracht_Prod_GAK_%", "Fracht_Konz_GAK_%", "Fracht_Konz_Abzug_%", "Fracht_Endwasser_%",
+                       "Bilanzsumme_%"]
+        detail_df = df_res[detail_cols].copy()
+        for col in detail_cols[1:]:
+            detail_df[col] = detail_df[col].round(3)
+        st.dataframe(detail_df, use_container_width=True, hide_index=True)
+
 st.subheader("📈 Verursacher- & Stufen-Analyse: Fracht- und Eliminationsaufteilung")
 
 if not is_ozon:
-    stack_cols = ["Substanzname", "Fracht_Biologie_%", "Fracht_Konzentrat_%", "Fracht_Produkt_%"]
-    if aktivieren_konz_gak:
-        stack_cols.append("Fracht_Konz_GAK_%")
-    if aktivieren_gak:
-        stack_cols.append("Fracht_GAK_%")
+    stufen = [
+        ("Fracht_Biologie_%", "1. Biologie (Abbau / Sorption)", "#404040"),
+        ("Fracht_Prod_GAK_%", "2. Produktwasser-GAK", "#707070"),
+        ("Fracht_Konz_GAK_%", "3. Konzentrat-GAK", "#a0a0a0"),
+        ("Fracht_Konz_Abzug_%", "4. Konzentrat-Abzug (unbehandelt)", "#d0d0d0"),
+        ("Fracht_Endwasser_%", "5. Verbleib im Endwasser", "#f5f5f5"),
+    ]
+    # nur Stufen zeigen, die in der Konfiguration vorkommen
+    aktive = [s for s in stufen
+              if (s[0] != "Fracht_Prod_GAK_%" or aktivieren_gak)
+              and (s[0] != "Fracht_Konz_GAK_%" or aktivieren_konz_gak)
+              and (s[0] != "Fracht_Konz_Abzug_%" or not aktivieren_konz_gak)]
 
-    stack_df = df_res.loc[df_res["Gruppe"] != "Summenparameter", stack_cols].melt(
-        id_vars=["Substanzname"],
-        var_name="Prozessstufe",
-        value_name="Anteil_Prozent"
-    )
+    stack_df = df_res.loc[df_res["Gruppe"] != "Summenparameter", ["Substanzname"] + [s[0] for s in aktive]].melt(
+        id_vars=["Substanzname"], var_name="Spalte", value_name="Anteil_Prozent")
+    name_map = {s[0]: s[1] for s in aktive}
+    reihenfolge = {s[1]: i for i, s in enumerate(aktive)}
+    stack_df["Prozessstufe"] = stack_df["Spalte"].map(name_map)
+    stack_df["Reihenfolge"] = stack_df["Prozessstufe"].map(reihenfolge)
 
-    stage_mapping = {
-        "Fracht_Biologie_%": "1. Biologie (Abbau / Sorption)",
-        "Fracht_Konzentrat_%": "2. Konzentrat-Restfracht (Endwasser)",
-        "Fracht_Konz_GAK_%": "3. Konzentrat-GAK Adsorption",
-        "Fracht_GAK_%": "4. Produktwasser-GAK Adsorption",
-        "Fracht_Produkt_%": "5. Verbleib im Permeat/Endwasser"
-    }
-    stack_df["Prozessstufe"] = stack_df["Prozessstufe"].map(stage_mapping)
-
-    chart = alt.Chart(stack_df).mark_bar().encode(
+    chart = alt.Chart(stack_df).mark_bar(stroke="black", strokeWidth=0.5).encode(
         x=alt.X("Substanzname:N", title="Substanz", sort=None),
-        y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser-Eintrag (%)", stack="zero"),
-        color=alt.Color("Prozessstufe:N", title="Verbleib / Elimination über Stufe", scale=alt.Scale(scheme="greys")),
+        y=alt.Y("Anteil_Prozent:Q", title="Anteil an der frischen Zulauffracht (%)", stack="zero",
+                scale=alt.Scale(domain=[0, 100])),
+        color=alt.Color("Prozessstufe:N", title="Verbleib / Elimination über Stufe",
+                        scale=alt.Scale(domain=[s[1] for s in aktive], range=[s[2] for s in aktive]),
+                        sort=[s[1] for s in aktive]),
+        order=alt.Order("Reihenfolge:Q"),
         tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
     ).properties(height=400)
     st.altair_chart(chart, use_container_width=True)
@@ -782,9 +929,9 @@ else:
     ozon_stack_rows = []
     for _, row in df_res.loc[df_res["Gruppe"] != "Summenparameter"].iterrows():
         c_roh = float(row["C_Rohwasser"])
-        c_bio = float(row.get("C_Bio_Ablauf", row["C_Endwasser"]))
+        c_bio = float(row["C_Bio_Ablauf"])
         c_end = float(row["C_Endwasser"])
-        
+
         if c_roh > 0:
             bio_pct = max(0.0, (1.0 - (c_bio / c_roh))) * 100.0
             ozon_pct = max(0.0, ((c_bio - c_end) / c_roh)) * 100.0
@@ -792,15 +939,22 @@ else:
         else:
             bio_pct, ozon_pct, end_pct = 0.0, 0.0, 0.0
 
-        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "1. Biologischer Abbau", "Anteil_Prozent": bio_pct})
-        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "2. Ozonung", "Anteil_Prozent": ozon_pct})
-        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "3. Verbleib im Endwasser", "Anteil_Prozent": end_pct})
-        
+        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "1. Biologischer Abbau",
+                                "Anteil_Prozent": bio_pct})
+        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "2. Ozonung",
+                                "Anteil_Prozent": ozon_pct})
+        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "3. Verbleib im Endwasser",
+                                "Anteil_Prozent": end_pct})
+
     stack_df = pd.DataFrame(ozon_stack_rows)
-    chart = alt.Chart(stack_df).mark_bar().encode(
+    ozon_stufen = ["1. Biologischer Abbau", "2. Ozonung", "3. Verbleib im Endwasser"]
+    chart = alt.Chart(stack_df).mark_bar(stroke="black", strokeWidth=0.5).encode(
         x=alt.X("Substanzname:N", title="Substanz", sort=None),
-        y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser (%)", stack="zero"),
-        color=alt.Color("Prozessstufe:N", title="Prozessstufe", scale=alt.Scale(scheme="greys")),
+        y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser (%)", stack="zero",
+                scale=alt.Scale(domain=[0, 100])),
+        color=alt.Color("Prozessstufe:N", title="Prozessstufe",
+                        scale=alt.Scale(domain=ozon_stufen, range=["#404040", "#a0a0a0", "#f5f5f5"]),
+                        sort=ozon_stufen),
         tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
     ).properties(height=400)
     st.altair_chart(chart, use_container_width=True)
