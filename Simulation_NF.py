@@ -810,7 +810,7 @@ if ausgewählte_substanzen:
 
     if not profile_df.empty:
         base_chart = alt.Chart(profile_df).encode(
-            x=alt.X("Prozessstufe:N", title="Verfahrensstufe", sort=None),
+            x=alt.X("Prozessstufe:N", title="Verfahrensstufe"),
             y=alt.Y("Rel_Konzentration:Q", title="Verbleibende Konzentration (% vom Rohwasser)", scale=alt.Scale(domain=[0, 105])),
             color=alt.Color("Substanz:N", title="Substanz", scale=alt.Scale(scheme="category10")),
             tooltip=[
