@@ -242,7 +242,7 @@ except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 # =========================================================
-# 4. DYNAMISCHES FLIEßBILD (SVG MIT VERMISCHUNG NACH GAK)
+# 4. DYNAMISCHES FLIEßBILD (SAUBER ENTZERRTES SVG)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
@@ -265,7 +265,7 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         """
 
     parts.append("""
-    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1120 290" preserveAspectRatio="xMidYMid meet" role="img">
+    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1120 330" preserveAspectRatio="xMidYMid meet" role="img">
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
           <path d="M0,0 L8,4 L0,8 Z" class="arrowhead"/>
@@ -274,9 +274,9 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
       <style>
         text { font-family: Arial, sans-serif; font-size: 13px; fill: #000; }
         .stage { font-size: 13px; font-weight: bold; }
-        .subtitle { font-size: 11px; }
+        .subtitle { font-size: 11px; fill: #444; }
         .box-label { font-size: 14px; font-weight: bold; }
-        .label { font-size: 12px; }
+        .label { font-size: 11px; fill: #222; }
         .pipe { fill: none; stroke: #000; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
         .arrowhead { fill: #000; stroke: none; }
         rect { fill: #fff; stroke: #000; stroke-width: 1.8; }
@@ -299,8 +299,8 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
     # Biologie
     parts.append(text(300, 15, "Biologische Reinigung", "subtitle"))
     parts.append(box(225, 65, 150, 70, "Biologie"))
-    parts.append(line([(300, 135), (300, 167)], arrow=True))
-    parts.append(text(310, 158, "Schlammabzug", "label", "start"))
+    parts.append(line([(300, 135), (300, 175)], arrow=True))
+    parts.append(text(310, 168, "Schlammabzug", "label", "start"))
 
     if is_ozon:
         parts.append(text(625, 15, "Ozonung", "subtitle"))
@@ -315,8 +315,8 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         if has_bypass:
             parts.append(line([(375, 100), (430, 100)], arrow=True))
             parts.append('<circle cx="430" cy="100" r="3.5" class="junction"/>')
-            parts.append(line([(430, 100), (430, 55), (750, 55), (750, 100)], arrow=True))
-            parts.append(text(590, 46, "Bypass-Teilstrom", "subtitle"))
+            parts.append(line([(430, 100), (430, 45), (750, 45), (750, 100)], arrow=True))
+            parts.append(text(590, 36, "Bypass-Teilstrom", "subtitle"))
             parts.append(line([(430, 100), (535, 100)], arrow=True))
         else:
             parts.append(line([(375, 100), (535, 100)], arrow=True))
@@ -327,35 +327,30 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
         <line x1="535" y1="61" x2="654" y2="139" stroke="#000" stroke-width="1.8"/>
         """)
 
-        parts.append(line([(655, 100), (750, 100)]))
+        # Konzentrat-Rückführung in die Biologie (unten geführt)
+        parts.append(line([(595, 140), (595, 230), (195, 230), (195, 125), (225, 125)], arrow=True))
+        parts.append(text(395, 218, "Konzentrat-Rückführung (Biologie)", "label"))
 
-        if has_bypass:
-            parts.append('<circle cx="750" cy="100" r="3.5" class="junction"/>')
-
-        # Konzentrat-Führung (Rückführung in Biologie + Restkonzentrat über Konz-GAK in den Endstrom)
-        parts.append(line([(595, 140), (595, 215), (205, 215), (205, 125), (225, 125)], arrow=True))
-        parts.append(text(410, 204, "Konzentrat-Rückführung", "label"))
-
+        # Konzentrat-GAK (Restkonzentrat-Teilstrom)
         if aktivieren_konz_gak:
-            parts.append(text(700, 175, "Konzentrat-Teilstrom", "subtitle"))
-            parts.append(line([(630, 140), (630, 195), (690, 195)], arrow=True))
-            parts.append(box(690, 170, 95, 50, "Konz-GAK"))
-            # Vermischungspfeil von Konz-GAK hinter den Hauptstrom
-            parts.append(line([(785, 195), (860, 195), (860, 100), (880, 100)], arrow=True))
+            parts.append(line([(630, 140), (630, 185), (680, 185)], arrow=True))
+            parts.append(box(680, 160, 100, 50, "Konz-GAK"))
+            # Leitung von Konz-GAK hoch und in den Hauptstrom hinter NF/Polishing
+            parts.append(line([(780, 185), (860, 185), (860, 100), (880, 100)], arrow=True))
             parts.append('<circle cx="860" cy="100" r="3.5" class="junction"/>')
-            parts.append(text(830, 184, "Gereinigter Konzentrat-Strom", "label"))
+            parts.append(text(820, 175, "Gereinigter Konzentrat-Strom", "label"))
 
         if aktivieren_gak:
-            parts.append(text(825, 30, "Produktwasser-GAK", "subtitle"))
-            parts.append(line([(750, 100), (775, 100)], arrow=True))
+            parts.append(text(825, 15, "Produktwasser-GAK", "subtitle"))
+            parts.append(line([(655, 100), (775, 100)], arrow=True))
             parts.append(box(775, 70, 100, 60, "GAK"))
             parts.append(line([(875, 100), (920, 100)], arrow=True))
-            parts.append(text(930, 94, "Gereinigtes", anchor="start"))
-            parts.append(text(930, 111, "Abwasser", anchor="start"))
+            parts.append(text(935, 94, "Gereinigtes", anchor="start"))
+            parts.append(text(935, 111, "Endwasser", anchor="start"))
         else:
-            parts.append(line([(750, 100), (920, 100)], arrow=True))
-            parts.append(text(930, 94, "Gereinigtes", anchor="start"))
-            parts.append(text(930, 111, "Abwasser", anchor="start"))
+            parts.append(line([(655, 100), (920, 100)], arrow=True))
+            parts.append(text(935, 94, "Gereinigtes", anchor="start"))
+            parts.append(text(935, 111, "Endwasser", anchor="start"))
 
     parts.append("</svg>")
     return "".join(parts)
@@ -363,10 +358,10 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
 svg_schema = build_process_svg(is_ozon=is_ozon, has_bypass=has_bypass, aktivieren_gak=aktivieren_gak, aktivieren_konz_gak=aktivieren_konz_gak)
 html_schema = f"""
 <div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
-    <div style="min-width: 760px;">{svg_schema}</div>
+    <div style="min-width: 780px;">{svg_schema}</div>
 </div>
 """
-components.html(html_schema, height=310, scrolling=False)
+components.html(html_schema, height=340, scrolling=False)
 st.divider()
 
 # =========================================================
@@ -562,7 +557,6 @@ for _, row in df.iterrows():
         nf_elim_pct = r_nf * 100.0
         E_rez = 0.0 if row["Substanzname"] == "CSB" else E
         
-        # Iteration für geschlossene Schleife (Rückführung des untern Teils in Bio)
         c_bio = c_vkl * (1.0 - E)
         for _ in range(15):
             c_perm = c_bio * (1.0 - r_nf)
@@ -573,19 +567,16 @@ for _, row in df.iterrows():
         akkum = (c_bio / c_bio_ref) if c_bio_ref > 0 else 1.0
         c_nach_nf = (fl["q_perm"] * c_perm + fl["q_bypass"] * c_bio) / fl["q_prod"]
 
-        # Produktwasser-GAK Polishing
         if aktivieren_gak:
             c_prod_gac, gak_elim_pct = wende_gak_an(c_nach_nf, row, gak_ebct, q_produkt, gak_standzeit_tage, doc_faktor)
         else:
             c_prod_gac = c_nach_nf
 
-        # Konzentrat-GAK Polishing für den Restkonzentratstrom
         if aktivieren_konz_gak:
             c_konz_gac, konz_gak_elim_pct = wende_gak_an(c_konz, row, gak_ebct, fl["q_konz_aus"], gak_standzeit_tage, doc_faktor)
         else:
             c_konz_gac = c_konz
 
-        # Vermischung des gereinigten Konzentrats mit dem Hauptstrom zum finalen Endwasser
         q_ges_end = q_produkt + (fl["q_konz_aus"] if aktivieren_konz_gak else 0.0)
         if q_ges_end > 0:
             c_final = (q_produkt * c_prod_gac + (fl["q_konz_aus"] if aktivieren_konz_gak else 0.0) * c_konz_gac) / q_ges_end
