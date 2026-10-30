@@ -90,7 +90,7 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
     * **Das Membran-Prinzip (NF):** Die Nanofiltration hält Schadstoffe wie PFAS extrem effizient zurück. Dabei entstehen zwei Ströme: gereinigtes *Permeat* (Hauptstrom) und aufkonzentriertes *Konzentrat*.
     * **Kreislauf-Rückführung:** Ein Teil des Konzentrats wird zurück in die Biologie geleitet, um den Abbau zu maximieren.
     * **Konzentrat-GAK & Vermischung:** Das restliche Konzentrat läuft durch einen Aktivkohlefilter (GAK) und wird anschließend wieder sauber mit dem Hauptstrom vermischt.
-    * **Perfekte Bilanz:** Es geht kein Tropfen Wasser oder Schadstoff verloren – die Frachtbilanz ist stets zu 100 % geschlossen!
+  
 
     > ℹ️ **Tipp:** Für weitere Informationen, lade das Begelitdokument ganz unten in der Seitenleiste herunter.
     """)
