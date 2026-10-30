@@ -343,19 +343,16 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
 
         # 2. Konzentrat-Management (Abzug aus NF-Unterschicht)
         if aktivieren_konz_gak:
-            # Wenn Konz-GAK aktiv ist: Strom aus NF nach unten in die Konz-GAK, danach hoch zum Endwasser-T-Stück
             parts.append(line([(630, 140), (630, 185), (680, 185)], arrow=True))
             parts.append(box(680, 160, 100, 50, "Konz-GAK"))
             
-            # Einmündungspunkt hinter GAK bzw. hinter Permeat-Ausgang festlegen
             join_x = current_x + 50
             parts.append(line([(780, 185), (join_x, 185), (join_x, 100)], arrow=True))
             parts.append(f'<circle cx="{join_x}" cy="100" r="3.5" class="junction"/>')
             parts.append(text(join_x - 55, 173, "Gereinigter Konzentrat-Strom", "label"))
             current_x = join_x
         else:
-            # Wenn KEINE Konz-GAK aktiv ist: Direkter Konzentrat-Abzugstrom aus der NF nach rechts unten
-            parts.append(line([(630, 140), (630, 185), (780, 185)], arrow=True))
+            parts.append(line([(630, 140), (630, 185), (780, 185)], arrow=True, cls="pipe"))
             parts.append(text(705, 173, "Konzentrat-Abzugstrom", "label"))
 
         # Durchgehender Hauptstrom zum Endwasser
@@ -365,6 +362,15 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
 
     parts.append("</svg>")
     return "".join(parts)
+
+svg_schema = build_process_svg(is_ozon=is_ozon, has_bypass=has_bypass, aktivieren_gak=aktivieren_gak, aktivieren_konz_gak=aktivieren_konz_gak)
+html_schema = f"""
+<div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
+    <div style="min-width: 820px;">{svg_schema}</div>
+</div>
+"""
+components.html(html_schema, height=360, scrolling=False)
+st.divider()
 
 # =========================================================
 # 5. ZULAUFKONZENTRATIONEN
