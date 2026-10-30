@@ -236,134 +236,186 @@ try:
 except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
-# =========================================================
-# 4. DYNAMISCHES PROZESSFLIEßBILD (SAUBERES SCHWARZ-WEISS)
-# =========================================================
 
-st.subheader("🗺️ Anlagen-Prozessfließbild")
+def build_process_svg(
+    is_ozon,
+    has_bypass,
+    aktivieren_gak,
+    aktivieren_konz_gak,
+    recycle_fraction=0.0,
+    bypass_fraction=0.0
+):
+    import html
 
-def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
+    # Prozentwerte direkt aus den Sidebar-Einstellungen
+    recycle_percent = recycle_fraction * 100
+    konzentrat_percent = (1 - recycle_fraction) * 100
+    bypass_percent = bypass_fraction * 100
+
+    # Schwarz-Weiß-Farbschema
+    stroke = "#222222"
+    fill = "#ffffff"
+    text_color = "#222222"
+    muted = "#666666"
+
     parts = []
 
-    def text(x, y, label, cls="label", anchor="middle"):
-        return f'<text x="{x}" y="{y}" class="{cls}" text-anchor="{anchor}">{escape(label)}</text>'
-
-    def line(points, arrow=False, cls="pipe"):
-        coords = " ".join(f"{x},{y}" for x, y in points)
-        marker = ' marker-end="url(#arrow)"' if arrow else ""
-        return f'<polyline points="{coords}" class="{cls}"{marker}/>'
-
-    def box(x, y, w, h, label):
-        return f"""
-        <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="5"/>
-        <text x="{x + w / 2}" y="{y + h / 2 + 5}" class="box-label" text-anchor="middle">{escape(label)}</text>
-        """
-
     parts.append("""
-    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1180 360" preserveAspectRatio="xMidYMid meet" role="img">
-      <defs>
-        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-          <path d="M0,0 L8,4 L0,8 Z" class="arrowhead"/>
-        </marker>
-      </defs>
-      <style>
-        text { font-family: Arial, sans-serif; font-size: 13px; fill: #000; }
-        .subtitle { font-size: 11px; fill: #444; }
-        .box-label { font-size: 14px; font-weight: bold; }
-        .label { font-size: 11px; fill: #222; }
-        .pipe { fill: none; stroke: #000; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-        .arrowhead { fill: #000; stroke: none; }
-        rect { fill: #fff; stroke: #000; stroke-width: 1.8; }
-        .junction { fill: #000; stroke: none; }
-      </style>
+    <svg xmlns="http://www.w3.org/2000/svg"
+         viewBox="0 0 1420 470"
+         width="100%"
+         height="100%"
+         style="background:#ffffff;font-family:Arial,sans-serif">
+
+    <defs>
+      <marker id="arrow"
+              markerWidth="10"
+              markerHeight="10"
+              refX="8"
+              refY="3"
+              orient="auto">
+        <path d="M0,0 L0,6 L9,3 z" fill="#222222"/>
+      </marker>
+    </defs>
     """)
 
-    # Vorklärung (Lamellen) & Einlauf
-    parts.append(text(130, 15, "Vorklärung", "subtitle"))
-    parts.append(text(12, 91, "Kommunales", anchor="start"))
-    parts.append(text(12, 108, "Abwasser", anchor="start"))
-    parts.append(line([(100, 100), (128, 100)], arrow=True))
+    def line(x1, y1, x2, y2, dashed=False, arrow=True):
+        dash = 'stroke-dasharray="7,5"' if dashed else ""
+        marker = 'marker-end="url(#arrow)"' if arrow else ""
+        parts.append(
+            f'<path d="M{x1},{y1} L{x2},{y2}" '
+            f'fill="none" stroke="{stroke}" stroke-width="2" '
+            f'{dash} {marker}/>'
+        )
 
-    for i in range(5):
-        x = 130 + i * 7
-        parts.append(f'<line x1="{x}" y1="77" x2="{x + 12}" y2="123" class="pipe"/>')
+    def box(x, y, w, h, title, subtitle=None):
+        parts.append(
+            f'<rect x="{x}" y="{y}" width="{w}" height="{h}" '
+            f'rx="3" fill="{fill}" stroke="{stroke}" stroke-width="2"/>'
+        )
+        parts.append(
+            f'<text x="{x+w/2}" y="{y+30}" text-anchor="middle" '
+            f'font-size="15" font-weight="bold" fill="{text_color}">'
+            f'{html.escape(title)}</text>'
+        )
+        if subtitle:
+            parts.append(
+                f'<text x="{x+w/2}" y="{y+52}" text-anchor="middle" '
+                f'font-size="12" fill="{muted}">'
+                f'{html.escape(subtitle)}</text>'
+            )
 
-    parts.append(line([(165, 100), (225, 100)], arrow=True))
+    def label(x, y, value, anchor="middle", size=12):
+        parts.append(
+            f'<text x="{x}" y="{y}" text-anchor="{anchor}" '
+            f'font-size="{size}" fill="{text_color}">'
+            f'{html.escape(str(value))}</text>'
+        )
 
-    # Biologie
-    parts.append(text(300, 15, "Biologische Reinigung", "subtitle"))
-    parts.append(box(225, 65, 150, 70, "Biologie"))
-    parts.append(line([(300, 135), (300, 175)], arrow=True))
-    parts.append(text(310, 168, "Schlammabzug", "label", "start"))
+    def junction(x, y):
+        parts.append(
+            f'<circle cx="{x}" cy="{y}" r="4" fill="{stroke}"/>'
+        )
 
+    # ---------------------------------------------------------
+    # Ozon-Variante
+    # ---------------------------------------------------------
     if is_ozon:
-        parts.append(text(625, 15, "Ozonung", "subtitle"))
-        parts.append(line([(375, 100), (550, 100)], arrow=True))
-        parts.append(box(550, 65, 150, 70, "Ozonung"))
-        parts.append(line([(700, 100), (770, 100)], arrow=True))
-        parts.append(text(810, 94, "Gereinigtes", anchor="start"))
-        parts.append(text(810, 111, "Endwasser", anchor="start"))
+        box(40, 120, 160, 70, "Vorbehandlung")
+        box(300, 120, 160, 70, "Biologie")
+        box(580, 120, 160, 70, "Ozonung")
+        box(860, 120, 160, 70, "Nachbehandlung")
+
+        line(200, 155, 300, 155)
+        line(460, 155, 580, 155)
+        line(740, 155, 860, 155)
+        line(1020, 155, 1150, 155)
+
+        label(40, 100, "Zulauf", "start")
+        label(1150, 140, "Ablauf", "start")
+
+    # ---------------------------------------------------------
+    # Nanofiltrations-Variante
+    # ---------------------------------------------------------
     else:
-        parts.append(text(600, 15, "Nanofiltration", "subtitle"))
+        # Hauptaggregate
+        box(35, 115, 145, 70, "Vorbehandlung")
+        box(300, 115, 155, 70, "Biologie")
+        box(620, 115, 160, 70, "Nanofiltration")
 
+        # Zulauf und Biologie
+        line(180, 150, 300, 150)
+        line(455, 150, 530, 150)
+        junction(530, 150)
+
+        label(35, 95, "Zulauf", "start")
+
+        # Bypass: biologischer Ablauf umgeht die NF
         if has_bypass:
-            parts.append(line([(375, 100), (430, 100)], arrow=True))
-            parts.append('<circle cx="430" cy="100" r="3.5" class="junction"/>')
-            parts.append(line([(430, 100), (430, 45), (750, 45), (750, 100)], arrow=True))
-            parts.append(text(590, 36, "Bypass-Teilstrom", "subtitle"))
-            parts.append(line([(430, 100), (535, 100)], arrow=True))
-        else:
-            parts.append(line([(375, 100), (535, 100)], arrow=True))
+            line(530, 150, 530, 55, arrow=False)
+            line(530, 55, 930, 55, arrow=False)
+            line(930, 55, 930, 150)
 
-        parts.append("""
-        <rect x="535" y="60" width="120" height="80" rx="5"/>
-        <text x="560" y="105" class="box-label" text-anchor="middle">NF</text>
-        <line x1="535" y1="61" x2="654" y2="139" stroke="#000" stroke-width="1.8"/>
-        """)
+            label(
+                720, 42,
+                f"Bypass: {bypass_percent:.1f} %"
+            )
 
-        # Konzentrat-Rückführung in die Biologie (unten geführt)
-        parts.append(line([(595, 140), (595, 240), (185, 240), (185, 125), (225, 125)], arrow=True))
-        parts.append(text(390, 228, "Konzentrat-Rückführung (Biologie)", "label"))
+        # NF-Zulauf und Permeat
+        line(530, 150, 620, 150)
+        line(780, 150, 930, 150)
+        junction(930, 150)
 
-        current_x = 655
+        label(850, 132, "NF-Permeat")
 
-        # 1. Optionale Produktwasser-GAK (Polishing)
+        # Produktwasser-GAK nach der Zusammenführung
         if aktivieren_gak:
-            parts.append(text(825, 15, "Produktwasser-GAK", "subtitle"))
-            parts.append(line([(current_x, 100), (775, 100)], arrow=True))
-            parts.append(box(775, 70, 100, 60, "GAK"))
-            current_x = 875
-
-        # 2. Konzentrat-Management (Abzug aus NF-Unterschicht)
-        if aktivieren_konz_gak:
-            parts.append(line([(630, 140), (630, 185), (680, 185)], arrow=True))
-            parts.append(box(680, 160, 100, 50, "Konz-GAK"))
-            
-            join_x = current_x + 50
-            parts.append(line([(780, 185), (join_x, 185), (join_x, 100)], arrow=True))
-            parts.append('<circle cx="' + str(join_x) + '" cy="100" r="3.5" class="junction"/>')
-            parts.append(text(join_x - 55, 173, "Gereinigter Konzentrat-Strom", "label"))
-            current_x = join_x
+            box(990, 115, 150, 70, "Produktwasser-GAK")
+            line(930, 150, 990, 150)
+            line(1140, 150, 1220, 150)
         else:
-            parts.append(line([(630, 140), (630, 185), (780, 185)], arrow=True))
-            parts.append(text(705, 173, "Konzentrat-Abzugstrom", "label"))
+            line(930, 150, 1220, 150)
 
-        # Durchgehender Hauptstrom zum Endwasser
-        parts.append(line([(current_x, 100), (current_x + 60, 100)], arrow=True))
-        parts.append(text(current_x + 75, 94, "Gereinigtes", anchor="start"))
-        parts.append(text(current_x + 75, 111, "Endwasser", anchor="start"))
+        # Konzentrat aus der NF
+        line(700, 185, 700, 260)
+        junction(700, 260)
 
+        # Konzentrat-Rückführung zur Biologie
+        if recycle_fraction > 0:
+            line(700, 260, 700, 350, arrow=False)
+            line(700, 350, 380, 350, arrow=False)
+            line(380, 350, 380, 185)
+
+            label(
+                540, 340,
+                f"Rückführung: {recycle_percent:.1f} %"
+            )
+
+        # Verbleibendes Konzentrat
+        if konzentrat_percent > 0:
+            line(700, 260, 900, 260)
+            label(
+                800, 245,
+                f"Restkonzentrat: {konzentrat_percent:.1f} %"
+            )
+
+            if aktivieren_konz_gak:
+                box(900, 230, 170, 70, "Konzentrat-GAK")
+                line(1070, 265, 1220, 265)
+                line(1220, 265, 1220, 150)
+            else:
+                line(900, 260, 900, 390)
+                label(915, 385, "Konzentratabzug", "start")
+
+        # Ablauf
+        label(1240, 140, "Produktwasser", "start")
+        line(1220, 150, 1360, 150)
+        label(1360, 135, "Ablauf", "start")
+
+    # Abschluss
     parts.append("</svg>")
-    return "".join(parts)
 
-svg_schema = build_process_svg(is_ozon=is_ozon, has_bypass=has_bypass, aktivieren_gak=aktivieren_gak, aktivieren_konz_gak=aktivieren_konz_gak)
-html_schema = f"""
-<div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
-    <div style="min-width: 820px;">{svg_schema}</div>
-</div>
-"""
-components.html(html_schema, height=360, scrolling=False)
-st.divider()
+    return "".join(parts)
 
 # =========================================================
 # 5. ZULAUFKONZENTRATIONEN
