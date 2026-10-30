@@ -242,7 +242,7 @@ except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 # =========================================================
-# 4. DYNAMISCHES FLIEßBILD (SAUBER VERBUNDENE HAUPTLEITUNG)
+# 4. DYNAMISCHES FLIEßBILD (SAUBER ENTZERRTES SVG)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
@@ -360,6 +360,16 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
 
     parts.append("</svg>")
     return "".join(parts)
+
+svg_schema = build_process_svg(is_ozon=is_ozon, has_bypass=has_bypass, aktivieren_gak=aktivieren_gak, aktivieren_konz_gak=aktivieren_konz_gak)
+html_schema = f"""
+<div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
+    <div style="min-width: 820px;">{svg_schema}</div>
+</div>
+"""
+components.html(html_schema, height=360, scrolling=False)
+st.divider()
+
 # =========================================================
 # 5. ZULAUFKONZENTRATIONEN
 # =========================================================
