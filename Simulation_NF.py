@@ -69,7 +69,7 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
 
     ---
 
-    ### 🎛️ So bedienst du die Simulation
+    ### So bedienst du die Simulation
 
     1. **Verfahren auswählen (Seitenleiste links):**
        * Wähle oben links zwischen dem **Bestandssystem** (Klassische Ozonung) und dem **Advanced System** (Nanofiltration/NF).
@@ -85,15 +85,14 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
 
     ---
 
-    ### 🧬 Wie funktioniert das Advanced-Konzept? (Kurzerklärt)
+    ### Wie funktioniert das Advanced-Konzept? (Kurzerklärt)
 
     * **Das Membran-Prinzip (NF):** Die Nanofiltration hält Schadstoffe wie PFAS extrem effizient zurück. Dabei entstehen zwei Ströme: gereinigtes *Permeat* (Hauptstrom) und aufkonzentriertes *Konzentrat*.
     * **Kreislauf-Rückführung:** Ein Teil des Konzentrats wird zurück in die Biologie geleitet, um den Abbau zu maximieren.
     * **Konzentrat-GAK & Vermischung:** Das restliche Konzentrat läuft durch einen Aktivkohlefilter (GAK) und wird anschließend wieder sauber mit dem Hauptstrom vermischt.
     * **Perfekte Bilanz:** Es geht kein Tropfen Wasser oder Schadstoff verloren – die Frachtbilanz ist stets zu 100 % geschlossen!
 
-    > ℹ️ **Tipp:** Fahre mit der Maus über die Info-Symbole (**ⓘ**) neben den Reglern, um detaillierte wissenschaftliche Erklärungen zu den einzelnen Einstellungen zu erhalten.
-    Für weitere Informationen, lade das Begelitdokument ganz unten in der Seitenleiste herunter.
+    > ℹ️ **Tipp:** Für weitere Informationen, lade das Begelitdokument ganz unten in der Seitenleiste herunter.
     """)
 
 # =========================================================
