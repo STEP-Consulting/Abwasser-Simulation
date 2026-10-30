@@ -350,8 +350,8 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
 
         # Durchgehender Hauptstrom zum Endwasser
         parts.append(line([(current_x, 100), (current_x + 60, 100)], arrow=True))
-        parts.append(text(current_x + 75, 94, "Gereinigtes", anchor="start"))
-        parts.append(text(current_x + 75, 111, "Endwasser", anchor="start"))
+        parts.append(text(current_x + 75, 111, "Gereinigtes", anchor="start"))
+        parts.append(text(current_x + 75, 130, "Endwasser", anchor="start"))
 
     parts.append("</svg>")
     return "".join(parts)
