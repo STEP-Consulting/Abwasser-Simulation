@@ -894,71 +894,91 @@ if not is_ozon:
             detail_df[col] = detail_df[col].round(3)
         st.dataframe(detail_df, use_container_width=True, hide_index=True)
 
-st.subheader("📈 Verursacher- & Stufen-Analyse: Fracht- und Eliminationsaufteilung")
+# =========================================================
+# 9. TABELLE & DIAGRAMME (Linien-Konzentrationsprofil)
+# =========================================================
 
-if not is_ozon:
-    stufen = [
-        ("Fracht_Biologie_%", "1. Biologie (Abbau / Sorption)", "#404040"),
-        ("Fracht_Prod_GAK_%", "2. Produktwasser-GAK", "#707070"),
-        ("Fracht_Konz_GAK_%", "3. Konzentrat-GAK", "#a0a0a0"),
-        ("Fracht_Konz_Abzug_%", "4. Konzentrat-Abzug (unbehandelt)", "#d0d0d0"),
-        ("Fracht_Endwasser_%", "5. Verbleib im Endwasser", "#f5f5f5"),
-    ]
-    # nur Stufen zeigen, die in der Konfiguration vorkommen
-    aktive = [s for s in stufen
-              if (s[0] != "Fracht_Prod_GAK_%" or aktivieren_gak)
-              and (s[0] != "Fracht_Konz_GAK_%" or aktivieren_konz_gak)
-              and (s[0] != "Fracht_Konz_Abzug_%" or not aktivieren_konz_gak)]
+st.header("📊 Detaillierte Stoffbilanz")
 
-    stack_df = df_res.loc[df_res["Gruppe"] != "Summenparameter", ["Substanzname"] + [s[0] for s in aktive]].melt(
-        id_vars=["Substanzname"], var_name="Spalte", value_name="Anteil_Prozent")
-    name_map = {s[0]: s[1] for s in aktive}
-    reihenfolge = {s[1]: i for i, s in enumerate(aktive)}
-    stack_df["Prozessstufe"] = stack_df["Spalte"].map(name_map)
-    stack_df["Reihenfolge"] = stack_df["Prozessstufe"].map(reihenfolge)
-
-    chart = alt.Chart(stack_df).mark_bar(stroke="black", strokeWidth=0.5).encode(
-        x=alt.X("Substanzname:N", title="Substanz", sort=None),
-        y=alt.Y("Anteil_Prozent:Q", title="Anteil an der frischen Zulauffracht (%)", stack="zero",
-                scale=alt.Scale(domain=[0, 100])),
-        color=alt.Color("Prozessstufe:N", title="Verbleib / Elimination über Stufe",
-                        scale=alt.Scale(domain=[s[1] for s in aktive], range=[s[2] for s in aktive]),
-                        sort=[s[1] for s in aktive]),
-        order=alt.Order("Reihenfolge:Q"),
-        tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
-    ).properties(height=400)
-    st.altair_chart(chart, use_container_width=True)
-
+display_cols = ["Substanzname", "Gruppe", "Einheit", "C_Rohwasser", "Bio_Elimination_%"]
+if is_ozon:
+    display_cols.append("Ozon_Elimination_%")
 else:
-    ozon_stack_rows = []
-    for _, row in df_res.loc[df_res["Gruppe"] != "Summenparameter"].iterrows():
+    display_cols.extend(["R_NF_%"])
+    if aktivieren_gak:
+        display_cols.append("GAK_Elimination_%")
+    if aktivieren_konz_gak:
+        display_cols.append("Konz_GAK_Elimination_%")
+display_cols.extend(["C_Endwasser", "Konzentrationsreduktion_%"])
+
+display_df = df_res[display_cols].copy()
+for col in display_df.columns:
+    if col not in ["Substanzname", "Gruppe", "Einheit"]:
+        display_df[col] = display_df[col].round(2)
+
+st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+st.subheader("📈 Linien-Konzentrationsprofil: Verlauf über die Reinigungsstufen")
+
+# Auswahlbox, welche Substanzen im Profil angezeigt werden sollen
+verfügbare_substanzen = df_res.loc[df_res["Gruppe"] != "Summenparameter", "Substanzname"].tolist()
+ausgewählte_substanzen = st.multiselect(
+    "Substanzen für das Profil auswählen:",
+    options=verfügbare_substanzen,
+    default=["PFOA", "Diclofenac", "Carbamazepin", "Ibuprofen"] if "Diclofenac" in verfügbare_substanzen else verfügbare_substanzen[:3]
+)
+
+if ausgewählte_substanzen:
+    profile_rows = []
+    
+    for _, row in df_res[df_res["Substanzname"].isin(ausgewählte_substanzen)].iterrows():
+        substanz = row["Substanzname"]
         c_roh = float(row["C_Rohwasser"])
-        c_bio = float(row["C_Bio_Ablauf"])
-        c_end = float(row["C_Endwasser"])
-
-        if c_roh > 0:
-            bio_pct = max(0.0, (1.0 - (c_bio / c_roh))) * 100.0
-            ozon_pct = max(0.0, ((c_bio - c_end) / c_roh)) * 100.0
-            end_pct = max(0.0, (c_end / c_roh)) * 100.0
+        
+        if c_roh <= 0:
+            continue
+            
+        # Konzentrationen an den jeweiligen Punkten ermitteln (relativ zum Rohwasser in %)
+        c_vkl_rel = (float(row.get("C_Vorklaerung", c_roh)) / c_roh) * 100.0
+        c_bio_rel = (float(row.get("C_Bio_Ablauf", c_roh)) / c_roh) * 100.0
+        c_end_rel = (float(row["C_Endwasser"]) / c_roh) * 100.0
+        
+        # Stufen definieren
+        if is_ozon:
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "1. Rohwasser", "Rel_Konzentration": 100.0})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "2. Vorklärung", "Rel_Konzentration": c_vkl_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "3. Biologie", "Rel_Konzentration": c_bio_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "4. Endwasser (Ozon)", "Rel_Konzentration": c_end_rel})
         else:
-            bio_pct, ozon_pct, end_pct = 0.0, 0.0, 0.0
+            # Für Nanofiltration haben wir noch den Zwischenschritt nach NF
+            c_nach_nf_rel = (float(row.get("C_Nach_NF", row["C_Endwasser"])) / c_roh) * 100.0 if "C_Nach_NF" in row else c_bio_rel
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "1. Rohwasser", "Rel_Konzentration": 100.0})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "2. Vorklärung", "Rel_Konzentration": c_vkl_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "3. Biologie", "Rel_Konzentration": c_bio_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "4. Nach Nanofiltration", "Rel_Konzentration": c_nach_nf_rel})
+            profile_rows.append({"Substanz": substanz, "Prozessstufe": "5. Gereinigtes Endwasser", "Rel_Konzentration": c_end_rel})
 
-        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "1. Biologischer Abbau",
-                                "Anteil_Prozent": bio_pct})
-        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "2. Ozonung",
-                                "Anteil_Prozent": ozon_pct})
-        ozon_stack_rows.append({"Substanzname": row["Substanzname"], "Prozessstufe": "3. Verbleib im Endwasser",
-                                "Anteil_Prozent": end_pct})
+    profile_df = pd.DataFrame(profile_rows)
 
-    stack_df = pd.DataFrame(ozon_stack_rows)
-    ozon_stufen = ["1. Biologischer Abbau", "2. Ozonung", "3. Verbleib im Endwasser"]
-    chart = alt.Chart(stack_df).mark_bar(stroke="black", strokeWidth=0.5).encode(
-        x=alt.X("Substanzname:N", title="Substanz", sort=None),
-        y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser (%)", stack="zero",
-                scale=alt.Scale(domain=[0, 100])),
-        color=alt.Color("Prozessstufe:N", title="Prozessstufe",
-                        scale=alt.Scale(domain=ozon_stufen, range=["#404040", "#a0a0a0", "#f5f5f5"]),
-                        sort=ozon_stufen),
-        tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
-    ).properties(height=400)
-    st.altair_chart(chart, use_container_width=True)
+    if not profile_df.empty:
+        # Altair Liniendiagramm mit Punkten
+        base_chart = alt.Chart(profile_df).encode(
+            x=alt.X("Prozessstufe:N", title="Verfahrensstufe", sort=None),
+            y=alt.Y("Rel_Konzentration:Q", title="Verbleibende Konzentration (% vom Rohwasser)", scale=alt.Scale(domain=[0, 105])),
+            color=alt.Color("Substanz:N", title="Substanz", scale=alt.Scale(scheme="category10")),
+            tooltip=[
+                alt.Tooltip("Substanz:N", title="Substanz"),
+                alt.Tooltip("Prozessstufe:N", title="Stufe"),
+                alt.Tooltip("Rel_Konzentration:Q", title="Verbleibend", format=".1f", suffix="%")
+            ]
+        )
+
+        lines = base_chart.mark_line(strokeWidth=2.5)
+        points = base_chart.mark_circle(size=70)
+
+        chart = (lines + points).properties(height=420)
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info("Bitte wähle mindestens eine Substanz aus.")
+else:
+    st.info("Keine Substanzen ausgewählt.")
