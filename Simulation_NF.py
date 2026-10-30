@@ -65,21 +65,35 @@ st.title("💧 Abwasser-Simulation: Verfahrens- & Konzeptvergleich")
 
 with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
     st.markdown("""
-    ## So funktioniert das Konzept (Konzentrat-GAK & Vermischung)
+    Willkommen bei der **Abwasser-Simulation**! Mit diesem Werkzeug kannst du verschiedene Verfahren zur Abwasserreinigung (Spurenstoff- und PFAS-Elimination) direkt miteinander vergleichen.
 
-    ### 1. Konzentrat-Management
-    - Ein Teil des NF-Konzentrats wird in die Biologie zurückgeführt (stationärer Kreislauf, geschlossen gelöst).
-    - Der Reststrom des Konzentrats wird optional über eine **Konzentrat-GAK** gereinigt und hinter der Produkt-GAK
-      mit dem gereinigten Endwasser **vermischt**. Ohne Konzentrat-GAK verlässt das Konzentrat die Anlage als Abzug.
+    ---
 
-    ### 2. GAK-Modell
-    - Die Elimination folgt einer Durchbruchskurve in Bettvolumina (BV). Die Standzeit legt fest, bei welchem BV die
-      Kohle getauscht wird. Standardmäßig wird die **mittlere Elimination über die Standzeit** ausgewiesen.
-    - Das Konzentrat enthält deutlich mehr DOC als das Produktwasser. Der Matrix-Faktor der Konzentrat-GAK wird deshalb
-      um die DOC-Aufkonzentrierung der NF verkleinert.
+    ### 🎛️ So bedienst du die Simulation
 
-    ### 3. Frachtbilanz
-    - Biologie + Produkt-GAK + Konzentrat-GAK + Konzentrat-Abzug + Endwasser = 100 % der frischen Zulauffracht.
+    1. **Verfahren auswählen (Seitenleiste links):**
+       * Wähle oben links zwischen dem **Bestandssystem** (Klassische Ozonung) und dem **Advanced System** (Nanofiltration/NF).
+    
+    2. **Parameter anpassen:**
+       * **Hydraulik:** Stelle die Wassermenge ($Q$) und evtl. einen Bypass ein.
+       * **Reinigungsstufen:** Schalte nach Bedarf die *Produktwasser-GAK* oder die *Konzentrat-GAK* an oder aus.
+       * **Stoffkonzentrationen:** Weiter unten kannst du die Zulaufwerte für Schadstoffe (z. B. PFAS, Medikamente) individuell anpassen.
+
+    3. **Ergebnisse ablesen:**
+       * Die Simulation rechnet alle Frachten und Konzentrationen **automatisch in Echtzeit** um.
+       * Achte ganz oben im Dashboard auf die **Ampel-Indikatoren**: Sie zeigen dir sofort, ob gesetzliche Grenzwerte oder Projekt-Szenarioziele eingehalten werden.
+
+    ---
+
+    ### 🧬 Wie funktioniert das Advanced-Konzept? (Kurzerklärt)
+
+    * **Das Membran-Prinzip (NF):** Die Nanofiltration hält Schadstoffe wie PFAS extrem effizient zurück. Dabei entstehen zwei Ströme: gereinigtes *Permeat* (Hauptstrom) und aufkonzentriertes *Konzentrat*.
+    * **Kreislauf-Rückführung:** Ein Teil des Konzentrats wird zurück in die Biologie geleitet, um den Abbau zu maximieren.
+    * **Konzentrat-GAK & Vermischung:** Das restliche Konzentrat läuft durch einen Aktivkohlefilter (GAK) und wird anschließend wieder sauber mit dem Hauptstrom vermischt.
+    * **Perfekte Bilanz:** Es geht kein Tropfen Wasser oder Schadstoff verloren – die Frachtbilanz ist stets zu 100 % geschlossen!
+
+    > ℹ️ **Tipp:** Fahre mit der Maus über die Info-Symbole (**ⓘ**) neben den Reglern, um detaillierte wissenschaftliche Erklärungen zu den einzelnen Einstellungen zu erhalten.
+    Für weitere Informationen, lade das Begelitdokument ganz unten in der Seitenleiste herunter.
     """)
 
 # =========================================================
