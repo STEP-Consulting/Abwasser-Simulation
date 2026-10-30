@@ -36,36 +36,27 @@ st.set_page_config(
 )
 
 
-def _get_app_password():
-    """Passwort aus .streamlit/secrets.toml bzw. den Secrets der Hosting-Plattform (Schlüssel APP_PASSWORD)."""
-    try:
-        return st.secrets["APP_PASSWORD"]
-    except Exception:
-        return None
-
+# Festes Passwort direkt im Skript hinterlegen
+PASSWORD = "Passwort"  # Hier Wunschpasswort eintragen
 
 def check_password():
     """Gibt True zurück, wenn das Passwort korrekt eingegeben wurde."""
-    if st.session_state.get("password_correct", False):
-        return True
+    if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
 
-    erwartet = _get_app_password()
-    if erwartet is None:
-        st.error("Es ist kein Passwort konfiguriert. Bitte APP_PASSWORD in den Streamlit-Secrets "
-                 "(.streamlit/secrets.toml) hinterlegen.")
-        return False
+    if st.session_state["password_correct"]:
+        return True
 
     st.subheader("🔒 Passwortgeschützter Bereich")
     pwd = st.text_input("Bitte gib das Passwort ein, um die Simulation zu starten:", type="password")
-
+    
     if st.button("Anmelden"):
-        if hmac.compare_digest(pwd.encode("utf-8"), str(erwartet).encode("utf-8")):
+        if pwd == PASSWORD:
             st.session_state["password_correct"] = True
             st.rerun()
         else:
             st.error("Falsches Passwort!")
     return False
-
 
 if not check_password():
     st.stop()
