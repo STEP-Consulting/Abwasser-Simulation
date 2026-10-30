@@ -2,9 +2,9 @@
 """
 Integrierte Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
 1. Bestandssystem: Biologie + Ozonung
-2. Advanced System: Nanofiltration mit Konzentrat-GAK & Produkt-GAK
-   - Einheitliches Schwarz-Weiß-Design für das Prozessfließbild
-   - Kompakte Vorklärung
+2. Advanced System: Nanofiltration mit Konzentrat-GAK & Produkt-GAK 
+   - Exaktes Schwarz-Weiß-Design
+   - Saubere, übersichtliche Leitungsführung ohne Linien-Überschneidungen
 """
 
 import streamlit as st
@@ -58,7 +58,7 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
     ### 1. Konzentrat-Management
     - Ein Teil des NF-Konzentrats wird in die Biologie zurückgeführt.
     - Der Reststrom des Konzentrats wird über eine **Konzentrat-GAK** gereinigt und hinter der Haupt-/Polishing-Stufe mit dem gereinigten Endwasser **vermischt**.
-    - Das Fließbild zeigt die exakte Einmündung hinter den jeweiligen GAK-Stufen ohne Überlappungen.
+    - Das Fließbild zeigt nun die exakte Einmündung hinter den jeweiligen GAK-Stufen ohne Überlappungen in klarem Schwarz-Weiß-Design.
     """)
 
 # =========================================================
@@ -237,37 +237,30 @@ except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 # =========================================================
-# 4. DYNAMISCHES PROZESSFLIEßBILD (SCHWARZ-WEISS + GEMISCHT)
+# 4. DYNAMISCHES PROZESSFLIEßBILD (SAUBERES SCHWARZ-WEISS)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
 
-def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, recycle_fraction=0.20, bypass_fraction=0.0):
+def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak):
     parts = []
 
-    recycle_pct = recycle_fraction * 100
-    rest_pct = (1.0 - recycle_fraction) * 100
-    bypass_pct = bypass_fraction * 100
-
     def text(x, y, label, cls="label", anchor="middle"):
-        return f'<text x="{x}" y="{y}" class="{cls}" text-anchor="{anchor}">{escape(str(label))}</text>'
+        return f'<text x="{x}" y="{y}" class="{cls}" text-anchor="{anchor}">{escape(label)}</text>'
 
-    def line(points, arrow=True, cls="pipe"):
+    def line(points, arrow=False, cls="pipe"):
         coords = " ".join(f"{x},{y}" for x, y in points)
         marker = ' marker-end="url(#arrow)"' if arrow else ""
         return f'<polyline points="{coords}" class="{cls}"{marker}/>'
 
-    def box(x, y, w, h, label, cls="process-box"):
+    def box(x, y, w, h, label):
         return f"""
-        <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="5" class="{cls}"/>
-        <text x="{x + w / 2}" y="{y + h / 2 + 5}" class="box-label" text-anchor="middle">{escape(str(label))}</text>
+        <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="5"/>
+        <text x="{x + w / 2}" y="{y + h / 2 + 5}" class="box-label" text-anchor="middle">{escape(label)}</text>
         """
 
-    def junction(x, y):
-        return f'<circle cx="{x}" cy="{y}" r="3.5" class="junction"/>'
-
     parts.append("""
-    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1380 380" preserveAspectRatio="xMidYMid meet" role="img">
+    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1180 360" preserveAspectRatio="xMidYMid meet" role="img">
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
           <path d="M0,0 L8,4 L0,8 Z" class="arrowhead"/>
@@ -275,20 +268,18 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
       </defs>
       <style>
         text { font-family: Arial, sans-serif; font-size: 13px; fill: #000; }
-        .stage { font-size: 13px; font-weight: bold; }
         .subtitle { font-size: 11px; fill: #444; }
-        .small { font-size: 10px; fill: #444; }
-        .box-label { font-size: 14px; font-weight: bold; fill: #000; }
+        .box-label { font-size: 14px; font-weight: bold; }
         .label { font-size: 11px; fill: #222; }
         .pipe { fill: none; stroke: #000; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
         .arrowhead { fill: #000; stroke: none; }
-        .process-box { fill: #fff; stroke: #000; stroke-width: 1.8; }
+        rect { fill: #fff; stroke: #000; stroke-width: 1.8; }
         .junction { fill: #000; stroke: none; }
       </style>
     """)
 
-    # 1. Vorklärung (Lamellen-Struktur)
-    parts.append(text(130, 20, "Vorklärung", "subtitle"))
+    # Vorklärung (Lamellen) & Einlauf
+    parts.append(text(130, 15, "Vorklärung", "subtitle"))
     parts.append(text(12, 91, "Kommunales", anchor="start"))
     parts.append(text(12, 108, "Abwasser", anchor="start"))
     parts.append(line([(100, 100), (128, 100)], arrow=True))
@@ -299,71 +290,65 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
 
     parts.append(line([(165, 100), (225, 100)], arrow=True))
 
-    # 2. Biologische Reinigung
-    parts.append(text(300, 20, "Biologische Reinigung", "subtitle"))
+    # Biologie
+    parts.append(text(300, 15, "Biologische Reinigung", "subtitle"))
     parts.append(box(225, 65, 150, 70, "Biologie"))
     parts.append(line([(300, 135), (300, 175)], arrow=True))
-    parts.append(text(300, 192, "Schlammabzug", "label"))
+    parts.append(text(310, 168, "Schlammabzug", "label", "start"))
 
     if is_ozon:
-        # Ozonung-Pfad
-        parts.append(text(625, 20, "Ozonung", "subtitle"))
+        parts.append(text(625, 15, "Ozonung", "subtitle"))
         parts.append(line([(375, 100), (550, 100)], arrow=True))
         parts.append(box(550, 65, 150, 70, "Ozonung"))
-        parts.append(line([(700, 100), (800, 100)], arrow=True))
-        parts.append(text(815, 94, "Gereinigtes", anchor="start"))
-        parts.append(text(815, 111, "Endwasser", anchor="start"))
+        parts.append(line([(700, 100), (770, 100)], arrow=True))
+        parts.append(text(810, 94, "Gereinigtes", anchor="start"))
+        parts.append(text(810, 111, "Endwasser", anchor="start"))
     else:
-        # Nanofiltration-Pfad
-        parts.append(text(595, 20, "Nanofiltration", "subtitle"))
+        parts.append(text(600, 15, "Nanofiltration", "subtitle"))
 
-        # Bypass
         if has_bypass:
             parts.append(line([(375, 100), (430, 100)], arrow=True))
-            parts.append(junction(430, 100))
+            parts.append('<circle cx="430" cy="100" r="3.5" class="junction"/>')
             parts.append(line([(430, 100), (430, 45), (750, 45), (750, 100)], arrow=True))
-            parts.append(text(590, 36, f"Bypass Bioablauf ({bypass_pct:.0f} %)", "subtitle"))
+            parts.append(text(590, 36, "Bypass-Teilstrom", "subtitle"))
             parts.append(line([(430, 100), (535, 100)], arrow=True))
         else:
             parts.append(line([(375, 100), (535, 100)], arrow=True))
 
-        # NF Membrane Box
         parts.append("""
-        <rect x="535" y="60" width="120" height="80" rx="5" class="process-box"/>
-        <text x="595" y="105" class="box-label" text-anchor="middle">NF</text>
+        <rect x="535" y="60" width="120" height="80" rx="5"/>
+        <text x="560" y="105" class="box-label" text-anchor="middle">NF</text>
         <line x1="535" y1="61" x2="654" y2="139" stroke="#000" stroke-width="1.8"/>
         """)
 
-        # Konzentrat-Rückführung zur Biologie (unten)
-        if recycle_fraction > 0:
-            parts.append(line([(595, 140), (595, 240), (185, 240), (185, 125), (225, 125)], arrow=True))
-            parts.append(text(390, 228, f"Konzentrat-Rückführung Biologie ({recycle_pct:.0f} %)", "label"))
+        # Konzentrat-Rückführung in die Biologie (unten geführt)
+        parts.append(line([(595, 140), (595, 240), (185, 240), (185, 125), (225, 125)], arrow=True))
+        parts.append(text(390, 228, "Konzentrat-Rückführung (Biologie)", "label"))
 
         current_x = 655
 
-        # 1. Produktwasser-GAK
+        # 1. Optionale Produktwasser-GAK (Polishing)
         if aktivieren_gak:
-            parts.append(text(785, 20, "Produktwasser-GAK", "subtitle"))
-            parts.append(line([(current_x, 100), (735, 100)], arrow=True))
-            parts.append(box(735, 70, 100, 60, "GAK"))
-            current_x = 835
+            parts.append(text(825, 15, "Produktwasser-GAK", "subtitle"))
+            parts.append(line([(current_x, 100), (775, 100)], arrow=True))
+            parts.append(box(775, 70, 100, 60, "GAK"))
+            current_x = 875
 
-        # 2. Konzentrat-Behandlung & Vermischung
+        # 2. Konzentrat-Management (Abzug aus NF-Unterschicht)
         if aktivieren_konz_gak:
-            parts.append(text(700, 150, f"Restkonzentrat ({rest_pct:.0f} %)", "small"))
             parts.append(line([(630, 140), (630, 185), (680, 185)], arrow=True))
             parts.append(box(680, 160, 100, 50, "Konz-GAK"))
             
             join_x = current_x + 50
             parts.append(line([(780, 185), (join_x, 185), (join_x, 100)], arrow=True))
-            parts.append(junction(join_x, 100))
-            parts.append(text(join_x - 55, 173, "Gereinigtes Konzentrat", "small"))
+            parts.append('<circle cx="' + str(join_x) + '" cy="100" r="3.5" class="junction"/>')
+            parts.append(text(join_x - 55, 173, "Gereinigter Konzentrat-Strom", "label"))
             current_x = join_x
         else:
             parts.append(line([(630, 140), (630, 185), (780, 185)], arrow=True))
-            parts.append(text(705, 173, f"Konzentrat-Abzug ({rest_pct:.0f} %)", "label"))
+            parts.append(text(705, 173, "Konzentrat-Abzugstrom", "label"))
 
-        # Durchgehender Endwasser-Hauptstrom
+        # Durchgehender Hauptstrom zum Endwasser
         parts.append(line([(current_x, 100), (current_x + 60, 100)], arrow=True))
         parts.append(text(current_x + 75, 94, "Gereinigtes", anchor="start"))
         parts.append(text(current_x + 75, 111, "Endwasser", anchor="start"))
@@ -371,21 +356,13 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
     parts.append("</svg>")
     return "".join(parts)
 
-svg_schema = build_process_svg(
-    is_ozon=is_ozon,
-    has_bypass=has_bypass,
-    aktivieren_gak=aktivieren_gak,
-    aktivieren_konz_gak=aktivieren_konz_gak,
-    recycle_fraction=recycle_fraction,
-    bypass_fraction=bypass_fraction
-)
-
+svg_schema = build_process_svg(is_ozon=is_ozon, has_bypass=has_bypass, aktivieren_gak=aktivieren_gak, aktivieren_konz_gak=aktivieren_konz_gak)
 html_schema = f"""
 <div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
-    <div style="min-width: 850px;">{svg_schema}</div>
+    <div style="min-width: 820px;">{svg_schema}</div>
 </div>
 """
-components.html(html_schema, height=380, scrolling=False)
+components.html(html_schema, height=360, scrolling=False)
 st.divider()
 
 # =========================================================
@@ -787,7 +764,7 @@ if not is_ozon:
     chart = alt.Chart(stack_df).mark_bar().encode(
         x=alt.X("Substanzname:N", title="Substanz", sort=None),
         y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser-Eintrag (%)", stack="zero"),
-        color=alt.Color("Prozessstufe:N", title="Verbleib / Elimination über Stufe", scale=alt.Scale(scheme="tableau10")),
+        color=alt.Color("Prozessstufe:N", title="Verbleib / Elimination über Stufe", scale=alt.Scale(scheme="greys")),
         tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
     ).properties(height=400)
     st.altair_chart(chart, use_container_width=True)
@@ -814,7 +791,7 @@ else:
     chart = alt.Chart(stack_df).mark_bar().encode(
         x=alt.X("Substanzname:N", title="Substanz", sort=None),
         y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser (%)", stack="zero"),
-        color=alt.Color("Prozessstufe:N", title="Prozessstufe", scale=alt.Scale(scheme="tableau10")),
+        color=alt.Color("Prozessstufe:N", title="Prozessstufe", scale=alt.Scale(scheme="greys")),
         tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
     ).properties(height=400)
     st.altair_chart(chart, use_container_width=True)
