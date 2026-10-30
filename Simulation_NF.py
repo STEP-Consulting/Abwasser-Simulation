@@ -2,9 +2,9 @@
 """
 Integrierte Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
 1. Bestandssystem: Biologie + Ozonung
-2. Advanced System: Nanofiltration mit Konzentrat-GAK & Produkt-GAK (saubere Einmündung & Entzerrung)
-
-Inklusive energetischem Vergleichswert der Ozonung der Kläranlage Aachen-Sörs (2018).
+2. Advanced System: Nanofiltration mit Konzentrat-GAK & Produkt-GAK
+   - Einheitliches Schwarz-Weiß-Design für das Prozessfließbild
+   - Kompakte Vorklärung
 """
 
 import streamlit as st
@@ -14,13 +14,17 @@ import numpy as np
 import altair as alt
 from scipy.stats import lognorm
 from html import escape
+
+# =========================================================
+# 1. STREAMLIT-KONFIGURATION & PASSWORDSCHUTZ
+# =========================================================
+
 st.set_page_config(
     page_title="Abwasser-Simulation: Verfahrensvergleich",
     page_icon="💧",
     layout="wide"
 )
 
-# --- EINFACHER PASSWORDSCHUTZ ---
 PASSWORD = "Passwort"  # Hier dein Wunschpasswort eintragen
 
 def check_password():
@@ -31,7 +35,6 @@ def check_password():
     if st.session_state["password_correct"]:
         return True
 
-    # Login-Maske anzeigen
     st.subheader("🔒 Passwortgeschützter Bereich")
     pwd = st.text_input("Bitte gib das Passwort ein, um die Simulation zu starten:", type="password")
     
@@ -43,19 +46,8 @@ def check_password():
             st.error("Falsches Passwort!")
     return False
 
-# Wenn das Passwort nicht stimmt, stoppt das Skript hier
 if not check_password():
     st.stop()
-
-# =========================================================
-# 1. STREAMLIT-KONFIGURATION
-# =========================================================
-
-st.set_page_config(
-    page_title="Abwasser-Simulation: Verfahrensvergleich",
-    page_icon="💧",
-    layout="wide"
-)
 
 st.title("💧 Abwasser-Simulation: Verfahrens- & Konzeptvergleich")
 
@@ -66,7 +58,7 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
     ### 1. Konzentrat-Management
     - Ein Teil des NF-Konzentrats wird in die Biologie zurückgeführt.
     - Der Reststrom des Konzentrats wird über eine **Konzentrat-GAK** gereinigt und hinter der Haupt-/Polishing-Stufe mit dem gereinigten Endwasser **vermischt**.
-    - Das Fließbild zeigt nun die exakte Einmündung hinter den jeweiligen GAK-Stufen ohne Überlappungen.
+    - Das Fließbild zeigt die exakte Einmündung hinter den jeweiligen GAK-Stufen ohne Überlappungen.
     """)
 
 # =========================================================
@@ -197,7 +189,6 @@ if not is_ozon:
 else:
     recovery, recycle_fraction, mwco, zeta_pot, sigma_poren, delta_p = 0.8, 0.2, 200, -15.0, 0.3, 0.0
 
-# MWCO Median-Umrechnung
 mwco_median = mwco / np.exp(1.2816 * sigma_poren)
 
 with st.sidebar.expander("🧫 Vorklärung & Biologie", expanded=False):
@@ -229,7 +220,6 @@ PH_SYS_FIX = 7.5
 GAK_SCHUETTDICHTE_KG_M3 = 450.0
 SZENARIO_ZIELWERT_PFOA_PFOS = 300.0
 
-# --- PDF-DOWNLOAD IN DER SEITENLEISTE ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("📄 Dokumentation")
 
@@ -246,511 +236,140 @@ try:
 except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
-
 # =========================================================
-# 4. DYNAMISCHES PROZESSFLIEßBILD
+# 4. DYNAMISCHES PROZESSFLIEßBILD (SCHWARZ-WEISS + GEMISCHT)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
 
-
-def build_process_svg(
-    is_ozon,
-    has_bypass,
-    aktivieren_gak,
-    aktivieren_konz_gak,
-    recycle_fraction=0.20,
-    bypass_fraction=0.0
-):
+def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, recycle_fraction=0.20, bypass_fraction=0.0):
     parts = []
 
-    # Prozentwerte
     recycle_pct = recycle_fraction * 100
     rest_pct = (1.0 - recycle_fraction) * 100
     bypass_pct = bypass_fraction * 100
 
-    # -----------------------------------------------------
-    # SVG-HILFSFUNKTIONEN
-    # -----------------------------------------------------
-
     def text(x, y, label, cls="label", anchor="middle"):
-        return (
-            f'<text x="{x}" y="{y}" class="{cls}" '
-            f'text-anchor="{anchor}">{escape(str(label))}</text>'
-        )
+        return f'<text x="{x}" y="{y}" class="{cls}" text-anchor="{anchor}">{escape(str(label))}</text>'
 
     def line(points, arrow=True, cls="pipe"):
         coords = " ".join(f"{x},{y}" for x, y in points)
         marker = ' marker-end="url(#arrow)"' if arrow else ""
-        return (
-            f'<polyline points="{coords}" '
-            f'class="{cls}"{marker}/>'
-        )
+        return f'<polyline points="{coords}" class="{cls}"{marker}/>'
 
     def box(x, y, w, h, label, cls="process-box"):
         return f"""
-        <rect x="{x}" y="{y}" width="{w}" height="{h}"
-              rx="7" class="{cls}"/>
-        <text x="{x+w/2}" y="{y+h/2+5}"
-              class="box-label" text-anchor="middle">
-              {escape(str(label))}
-        </text>
+        <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="5" class="{cls}"/>
+        <text x="{x + w / 2}" y="{y + h / 2 + 5}" class="box-label" text-anchor="middle">{escape(str(label))}</text>
         """
 
     def junction(x, y):
-        return (
-            f'<circle cx="{x}" cy="{y}" r="4" '
-            f'class="junction"/>'
-        )
-
-    # -----------------------------------------------------
-    # SVG-GRUNDGERÜST
-    # -----------------------------------------------------
+        return f'<circle cx="{x}" cy="{y}" r="3.5" class="junction"/>'
 
     parts.append("""
-    <svg xmlns="http://www.w3.org/2000/svg"
-         width="100%"
-         viewBox="0 0 1420 470"
-         preserveAspectRatio="xMidYMid meet"
-         role="img">
-
-    <defs>
-        <marker id="arrow"
-                markerWidth="9"
-                markerHeight="9"
-                refX="8"
-                refY="4.5"
-                orient="auto"
-                markerUnits="userSpaceOnUse">
-            <path d="M0,0 L9,4.5 L0,9 Z"
-                  class="arrowhead"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1380 380" preserveAspectRatio="xMidYMid meet" role="img">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L8,4 L0,8 Z" class="arrowhead"/>
         </marker>
-    </defs>
-
-    <style>
-        text {
-            font-family: Arial, sans-serif;
-            fill: #202020;
-        }
-
-        .stage {
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .label {
-            font-size: 12px;
-        }
-
-        .subtitle {
-            font-size: 11px;
-            fill: #555;
-        }
-
-        .small {
-            font-size: 10px;
-            fill: #555;
-        }
-
-        .box-label {
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .pipe {
-            fill: none;
-            stroke: #444;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
-        .permeate {
-            fill: none;
-            stroke: #2878B5;
-            stroke-width: 2.5;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
-        .concentrate {
-            fill: none;
-            stroke: #C47A28;
-            stroke-width: 2.5;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
-        .recycle {
-            fill: none;
-            stroke: #26865B;
-            stroke-width: 2.5;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
-        .process-box {
-            fill: #FFFFFF;
-            stroke: #444;
-            stroke-width: 1.8;
-        }
-
-        .membrane-box {
-            fill: #EDF5FC;
-            stroke: #2878B5;
-            stroke-width: 2;
-        }
-
-        .gak-box {
-            fill: #EFF6EF;
-            stroke: #39845A;
-            stroke-width: 1.8;
-        }
-
-        .junction {
-            fill: #333;
-        }
-
-        .arrowhead {
-            fill: #444;
-        }
-    </style>
+      </defs>
+      <style>
+        text { font-family: Arial, sans-serif; font-size: 13px; fill: #000; }
+        .stage { font-size: 13px; font-weight: bold; }
+        .subtitle { font-size: 11px; fill: #444; }
+        .small { font-size: 10px; fill: #444; }
+        .box-label { font-size: 14px; font-weight: bold; fill: #000; }
+        .label { font-size: 11px; fill: #222; }
+        .pipe { fill: none; stroke: #000; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+        .arrowhead { fill: #000; stroke: none; }
+        .process-box { fill: #fff; stroke: #000; stroke-width: 1.8; }
+        .junction { fill: #000; stroke: none; }
+      </style>
     """)
 
-    # =====================================================
-    # 1. VORKLÄRUNG
-    # =====================================================
+    # 1. Vorklärung (Lamellen-Struktur)
+    parts.append(text(130, 20, "Vorklärung", "subtitle"))
+    parts.append(text(12, 91, "Kommunales", anchor="start"))
+    parts.append(text(12, 108, "Abwasser", anchor="start"))
+    parts.append(line([(100, 100), (128, 100)], arrow=True))
 
-    parts.append(text(20, 145, "Kommunales", "label", "start"))
-    parts.append(text(20, 162, "Abwasser", "label", "start"))
+    for i in range(5):
+        x = 130 + i * 7
+        parts.append(f'<line x1="{x}" y1="77" x2="{x + 12}" y2="123" class="pipe"/>')
 
-    parts.append(line([(105, 150), (125, 150)]))
+    parts.append(line([(165, 100), (225, 100)], arrow=True))
 
-    parts.append(text(195, 100, "Vorklärung", "stage"))
-    parts.append(box(125, 115, 140, 70, "Vorklärung"))
-
-    parts.append(line([(265, 150), (330, 150)]))
-
-    # =====================================================
-    # 2. BIOLOGISCHE REINIGUNG
-    # =====================================================
-
-    parts.append(text(410, 100, "Biologische Reinigung", "stage"))
-    parts.append(box(330, 115, 160, 70, "Biologie"))
-
-    # Schlammabzug
-    parts.append(line([(370, 185), (370, 220)]))
-    parts.append(text(370, 239, "Schlammabzug", "label"))
-
-    # Zulauf-Aufteilung hinter der Biologie
-    parts.append(line([(490, 150), (530, 150)]))
-    parts.append(junction(530, 150))
-
-    # =====================================================
-    # 3. OZON-VARIANTE
-    # =====================================================
+    # 2. Biologische Reinigung
+    parts.append(text(300, 20, "Biologische Reinigung", "subtitle"))
+    parts.append(box(225, 65, 150, 70, "Biologie"))
+    parts.append(line([(300, 135), (300, 175)], arrow=True))
+    parts.append(text(300, 192, "Schlammabzug", "label"))
 
     if is_ozon:
-
-        parts.append(line([(530, 150), (610, 150)]))
-
-        parts.append(text(690, 100, "Ozonung", "stage"))
-        parts.append(box(610, 115, 160, 70, "Ozonung"))
-
-        parts.append(line([(770, 150), (870, 150)]))
-
-        parts.append(text(
-            890, 144, "Gereinigtes", "label", "start"
-        ))
-        parts.append(text(
-            890, 161, "Endwasser", "label", "start"
-        ))
-
-    # =====================================================
-    # 4. NANOFILTRATION
-    # =====================================================
-
+        # Ozonung-Pfad
+        parts.append(text(625, 20, "Ozonung", "subtitle"))
+        parts.append(line([(375, 100), (550, 100)], arrow=True))
+        parts.append(box(550, 65, 150, 70, "Ozonung"))
+        parts.append(line([(700, 100), (800, 100)], arrow=True))
+        parts.append(text(815, 94, "Gereinigtes", anchor="start"))
+        parts.append(text(815, 111, "Endwasser", anchor="start"))
     else:
+        # Nanofiltration-Pfad
+        parts.append(text(595, 20, "Nanofiltration", "subtitle"))
 
-        parts.append(text(710, 100, "Nanofiltration", "stage"))
+        # Bypass
+        if has_bypass:
+            parts.append(line([(375, 100), (430, 100)], arrow=True))
+            parts.append(junction(430, 100))
+            parts.append(line([(430, 100), (430, 45), (750, 45), (750, 100)], arrow=True))
+            parts.append(text(590, 36, f"Bypass Bioablauf ({bypass_pct:.0f} %)", "subtitle"))
+            parts.append(line([(430, 100), (535, 100)], arrow=True))
+        else:
+            parts.append(line([(375, 100), (535, 100)], arrow=True))
 
-        # NF-Zulauf
-        parts.append(line([
-            (530, 150),
-            (620, 150)
-        ]))
-
-        # NF-Modul
-        parts.append(box(
-            620, 110, 160, 80,
-            "Nanofiltration",
-            "membrane-box"
-        ))
-
+        # NF Membrane Box
         parts.append("""
-        <line x1="620" y1="111"
-              x2="780" y2="189"
-              stroke="#2878B5"
-              stroke-width="2"/>
+        <rect x="535" y="60" width="120" height="80" rx="5" class="process-box"/>
+        <text x="595" y="105" class="box-label" text-anchor="middle">NF</text>
+        <line x1="535" y1="61" x2="654" y2="139" stroke="#000" stroke-width="1.8"/>
         """)
 
-        # -------------------------------------------------
-        # 4A. BYPASS
-        # -------------------------------------------------
-
-        if has_bypass:
-
-            parts.append(line([
-                (530, 150),
-                (530, 55),
-                (930, 55),
-                (930, 150)
-            ], cls="pipe"))
-
-            parts.append(text(
-                730, 42,
-                f"Bypass Bioablauf ({bypass_pct:.0f} %)",
-                "subtitle"
-            ))
-
-            parts.append(junction(930, 150))
-
-        # -------------------------------------------------
-        # 4B. PERMEAT
-        # -------------------------------------------------
-
-        parts.append(line([
-            (780, 150),
-            (930, 150)
-        ], cls="permeate"))
-
-        parts.append(junction(930, 150))
-
-        parts.append(text(
-            850, 130, "Permeat", "small"
-        ))
-
-        # Hauptstrom nach NF / Bypass
-        # -------------------------------------------------
-        # Bei beiden Varianten Zusammenführung bei x=930
-
-        # -------------------------------------------------
-        # 4C. KONZENTRAT-AUSTRITT UND AUFTEILUNG
-        # -------------------------------------------------
-
-        parts.append(line([
-            (700, 190),
-            (700, 270)
-        ], cls="concentrate"))
-
-        parts.append(text(
-            715, 220, "Konzentrat", "label", "start"
-        ))
-
-        parts.append(junction(700, 270))
-
-        # -------------------------------------------------
-        # 4D. KONZENTRAT-RÜCKFÜHRUNG
-        # -------------------------------------------------
-
+        # Konzentrat-Rückführung zur Biologie (unten)
         if recycle_fraction > 0:
+            parts.append(line([(595, 140), (595, 240), (185, 240), (185, 125), (225, 125)], arrow=True))
+            parts.append(text(390, 228, f"Konzentrat-Rückführung Biologie ({recycle_pct:.0f} %)", "label"))
 
-            parts.append(line([
-                (700, 270),
-                (700, 405),
-                (410, 405),
-                (410, 185)
-            ], cls="recycle"))
+        current_x = 655
 
-            parts.append(text(
-                560, 385,
-                f"Rückführung zur Biologie: {recycle_pct:.0f} %",
-                "label"
-            ))
-
-            parts.append(text(
-                395, 280,
-                "Rückführung",
-                "small",
-                "end"
-            ))
-
-            parts.append(junction(410, 185))
-
-        # -------------------------------------------------
-        # 4E. KONZENTRAT-RESTSTROM
-        # -------------------------------------------------
-
-        if rest_pct > 0:
-
-            parts.append(line([
-                (700, 270),
-                (900, 270)
-            ], cls="concentrate"))
-
-            parts.append(text(
-                800, 253,
-                f"Restkonzentrat: {rest_pct:.0f} %",
-                "label"
-            ))
-
-            # =============================================
-            # OPTION A: KONZENTRAT-GAK
-            # =============================================
-
-            if aktivieren_konz_gak:
-
-                parts.append(box(
-                    900, 240, 150, 60,
-                    "Konz-GAK",
-                    "gak-box"
-                ))
-
-                parts.append(text(
-                    975, 325,
-                    "Konzentratbehandlung",
-                    "small"
-                ))
-
-                # Gereinigtes Konzentrat
-                # wird separat zum Endwasser geführt
-                parts.append(line([
-                    (1050, 270),
-                    (1220, 270),
-                    (1220, 150)
-                ], cls="concentrate"))
-
-                parts.append(junction(1220, 150))
-
-                parts.append(text(
-                    1130, 253,
-                    "Gereinigtes Konzentrat",
-                    "small"
-                ))
-
-            # =============================================
-            # OPTION B: DIREKTER KONZENTRATABZUG
-            # =============================================
-
-            else:
-
-                parts.append(line([
-                    (900, 270),
-                    (900, 350)
-                ], cls="concentrate"))
-
-                parts.append(text(
-                    900, 373,
-                    "Konzentrat-Abzug",
-                    "label"
-                ))
-
-        # =================================================
-        # 5. PRODUKTWASSER-GAK
-        # =================================================
-
+        # 1. Produktwasser-GAK
         if aktivieren_gak:
+            parts.append(text(785, 20, "Produktwasser-GAK", "subtitle"))
+            parts.append(line([(current_x, 100), (735, 100)], arrow=True))
+            parts.append(box(735, 70, 100, 60, "GAK"))
+            current_x = 835
 
-            parts.append(line([
-                (930, 150),
-                (990, 150)
-            ], cls="permeate"))
-
-            parts.append(box(
-                990, 120, 150, 60,
-                "Produktwasser-GAK",
-                "gak-box"
-            ))
-
-            parts.append(line([
-                (1140, 150),
-                (1220, 150)
-            ], cls="permeate", arrow=False))
-
+        # 2. Konzentrat-Behandlung & Vermischung
+        if aktivieren_konz_gak:
+            parts.append(text(700, 150, f"Restkonzentrat ({rest_pct:.0f} %)", "small"))
+            parts.append(line([(630, 140), (630, 185), (680, 185)], arrow=True))
+            parts.append(box(680, 160, 100, 50, "Konz-GAK"))
+            
+            join_x = current_x + 50
+            parts.append(line([(780, 185), (join_x, 185), (join_x, 100)], arrow=True))
+            parts.append(junction(join_x, 100))
+            parts.append(text(join_x - 55, 173, "Gereinigtes Konzentrat", "small"))
+            current_x = join_x
         else:
+            parts.append(line([(630, 140), (630, 185), (780, 185)], arrow=True))
+            parts.append(text(705, 173, f"Konzentrat-Abzug ({rest_pct:.0f} %)", "label"))
 
-            parts.append(line([
-                (930, 150),
-                (1220, 150)
-            ], cls="permeate", arrow=False))
-
-        # =================================================
-        # 6. VEREINIGUNG UND ENDWASSER
-        # =================================================
-
-        # Konzentrat-GAK und Produktstrom treffen
-        # sich hinter den jeweiligen Behandlungsstufen.
-
-        parts.append(junction(1220, 150))
-
-        parts.append(line([
-            (1220, 150),
-            (1300, 150)
-        ], cls="permeate"))
-
-        parts.append(text(
-            1310, 144,
-            "Gereinigtes",
-            "label",
-            "start"
-        ))
-
-        parts.append(text(
-            1310, 161,
-            "Endwasser",
-            "label",
-            "start"
-        ))
-
-    # =====================================================
-    # 7. LEGENDE
-    # =====================================================
-
-    if not is_ozon:
-
-        parts.append(line([
-            (80, 445), (115, 445)
-        ], arrow=False, cls="pipe"))
-
-        parts.append(text(
-            125, 449, "Hauptstrom", "small", "start"
-        ))
-
-        parts.append(line([
-            (270, 445), (305, 445)
-        ], arrow=False, cls="permeate"))
-
-        parts.append(text(
-            315, 449, "Permeat / Produktwasser",
-            "small", "start"
-        ))
-
-        parts.append(line([
-            (510, 445), (545, 445)
-        ], arrow=False, cls="concentrate"))
-
-        parts.append(text(
-            555, 449, "Konzentrat",
-            "small", "start"
-        ))
-
-        parts.append(line([
-            (710, 445), (745, 445)
-        ], arrow=False, cls="recycle"))
-
-        parts.append(text(
-            755, 449, "Rückführung",
-            "small", "start"
-        ))
+        # Durchgehender Endwasser-Hauptstrom
+        parts.append(line([(current_x, 100), (current_x + 60, 100)], arrow=True))
+        parts.append(text(current_x + 75, 94, "Gereinigtes", anchor="start"))
+        parts.append(text(current_x + 75, 111, "Endwasser", anchor="start"))
 
     parts.append("</svg>")
-
     return "".join(parts)
-
-
-# ---------------------------------------------------------
-# FLIEßBILD ERZEUGEN
-# ---------------------------------------------------------
 
 svg_schema = build_process_svg(
     is_ozon=is_ozon,
@@ -762,29 +381,12 @@ svg_schema = build_process_svg(
 )
 
 html_schema = f"""
-<div style="
-    background: #ffffff;
-    padding: 16px;
-    border-radius: 8px;
-    border: 1px solid #D0D0D0;
-    width: 100%;
-    box-sizing: border-box;
-    overflow-x: auto;
-">
-    <div style="min-width: 1050px;">
-        {svg_schema}
-    </div>
+<div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
+    <div style="min-width: 850px;">{svg_schema}</div>
 </div>
 """
-
-components.html(
-    html_schema,
-    height=490,
-    scrolling=False
-)
-
+components.html(html_schema, height=380, scrolling=False)
 st.divider()
-
 
 # =========================================================
 # 5. ZULAUFKONZENTRATIONEN
@@ -1078,7 +680,7 @@ if not is_ozon:
 st.divider()
 
 # =========================================================
-# 9. KOSTENBILANZ (Ozonung – Fester Wert 0.018 €/m³)
+# 8. KOSTENBILANZ & ENERGIEBEDARFS-BILANZ
 # =========================================================
 
 if is_ozon:
@@ -1092,17 +694,11 @@ if is_ozon:
     k2.metric("Jährliche Betriebskosten", f"{opex_gesamt_jahr:,.0f} €/a".replace(",", "."))
     st.divider()
 
-# =========================================================
-# 10. ENERGIEBEDARFS-BILANZ (Vergleichswert Ozonung Aachen-Sörs 2018)
-# =========================================================
-
 st.header("⚡ Energiebedarfsbilanz & Vergleich")
-
-ENERGIE_BENCHMARK_AACHEN = 0.04824  # kWh/m³ (nur Ozonung, Kläranlage Aachen-Sörs 2018)
+ENERGIE_BENCHMARK_AACHEN = 0.04824  # kWh/m³ (nur Ozonung, KA Aachen-Sörs 2018)
 
 if not is_ozon:
     sec_permeat = delta_p / (36.0 * recovery * ETA_PUMPE)
-
     leistungsbedarf_nf_kw = fl["q_perm"] * sec_permeat
     jahresenergie_nf_kwh = leistungsbedarf_nf_kw * BETRIEBSSTUNDEN_JAHR
 
@@ -1119,39 +715,31 @@ if not is_ozon:
         leistungsbedarf_gak_kw = q_gak_ref * sec_gak
         jahresenergie_gak_kwh = leistungsbedarf_gak_kw * BETRIEBSSTUNDEN_JAHR
         spez_energie_gesamt_m3 += (leistungsbedarf_gak_kw / q_produkt)
-        st.metric("Gesamtenergie NF + GAK",
-                  f"{jahresenergie_nf_kwh + jahresenergie_gak_kwh:,.0f} kWh/a".replace(",", "."))
+        st.metric("Gesamtenergie NF + GAK", f"{jahresenergie_nf_kwh + jahresenergie_gak_kwh:,.0f} kWh/a".replace(",", "."))
 
         bv_wechsel = 1440.0 * gak_standzeit_tage / gak_ebct
         gak_spez_verbrauch = GAK_SCHUETTDICHTE_KG_M3 * 1000.0 / bv_wechsel
         gak_jahresbedarf_t = gak_spez_verbrauch * q_gak_ref * BETRIEBSSTUNDEN_JAHR / 1.0e6
         g1, g2 = st.columns(2)
-        g1.metric("Spez. Kohleverbrauch (berechnet)", f"{gak_spez_verbrauch:.1f} g/m³",
-                  help="Schüttdichte · 1000 / Bettvolumina bis zum Wechsel")
+        g1.metric("Spez. Kohleverbrauch (berechnet)", f"{gak_spez_verbrauch:.1f} g/m³")
         g2.metric("Kohlebedarf pro Jahr", f"{gak_jahresbedarf_t:.1f} t/a")
 
     st.markdown("---")
     st.subheader("📊 Energetischer Vergleich zur Ozonung (Großmaßstab)")
-
     c_ben1, c_ben2 = st.columns(2)
-    c_ben1.metric("Spez. Energiebedarf Advanced System", f"{spez_energie_gesamt_m3:.3f} kWh/m³",
-                  help="Bezogen auf das Produktwasser; nur NF und GAK")
-    c_ben2.metric("Vergleichswert Ozonung KA Aachen-Sörs (2018)", f"{ENERGIE_BENCHMARK_AACHEN:.3f} kWh/m³",
-                  help="Spezifischer Energiebedarf der Ozonung der KA Aachen-Sörs im Jahr 2018.")
+    c_ben1.metric("Spez. Energiebedarf Advanced System", f"{spez_energie_gesamt_m3:.3f} kWh/m³")
+    c_ben2.metric("Vergleichswert Ozonung KA Aachen-Sörs (2018)", f"{ENERGIE_BENCHMARK_AACHEN:.3f} kWh/m³")
 
 else:
     jahresenergie_bestand_kwh = q_feed * ENERGIE_BENCHMARK_AACHEN * BETRIEBSSTUNDEN_JAHR
     e1, e2 = st.columns(2)
-    e1.metric("Energiebedarf Ozonung (KA Aachen-Sörs 2018)", f"{ENERGIE_BENCHMARK_AACHEN:.3f} kWh/m³",
-              help="Spezifischer Energiebedarf der Ozonung der KA Aachen-Sörs (2018)")
-    e2.metric("Jahresenergiebedarf Ozonung", f"{jahresenergie_bestand_kwh:,.0f} kWh/a".replace(",", "."),
-              help=f"Bei Zulauf Q = {q_feed} m³/h")
-    st.info("ℹ️ Für die Ozonung dient der Wert der KA Aachen-Sörs als Energiebedarf.")
+    e1.metric("Energiebedarf Ozonung (KA Aachen-Sörs 2018)", f"{ENERGIE_BENCHMARK_AACHEN:.3f} kWh/m³")
+    e2.metric("Jahresenergiebedarf Ozonung", f"{jahresenergie_bestand_kwh:,.0f} kWh/a".replace(",", "."))
 
 st.divider()
 
 # =========================================================
-# 11. TABELLE & STUFEN-ELIMINATIONS-DIAGRAMM
+# 9. TABELLE & DIAGRAMME
 # =========================================================
 
 st.header("📊 Detaillierte Stoffbilanz")
@@ -1173,7 +761,6 @@ for col in display_df.columns:
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 st.subheader("📈 Verursacher- & Stufen-Analyse: Fracht- und Eliminationsaufteilung")
-st.markdown("Dieses gestapelte Diagramm zeigt, welcher Anteil der Rohwasserfracht in welcher Verfahrensstufe eliminiert oder ins gereinigte Endwasser überführt wird (Gesamtsumme = 100 %).")
 
 if not is_ozon:
     stack_cols = ["Substanzname", "Fracht_Biologie_%", "Fracht_Konzentrat_%", "Fracht_Produkt_%"]
@@ -1200,12 +787,9 @@ if not is_ozon:
     chart = alt.Chart(stack_df).mark_bar().encode(
         x=alt.X("Substanzname:N", title="Substanz", sort=None),
         y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser-Eintrag (%)", stack="zero"),
-        color=alt.Color("Prozessstufe:N", title="Verbleib / Elimination über Stufe",
-                        scale=alt.Scale(scheme="tableau10")),
+        color=alt.Color("Prozessstufe:N", title="Verbleib / Elimination über Stufe", scale=alt.Scale(scheme="tableau10")),
         tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
-    ).properties(
-        height=400
-    )
+    ).properties(height=400)
     st.altair_chart(chart, use_container_width=True)
 
 else:
@@ -1230,10 +814,7 @@ else:
     chart = alt.Chart(stack_df).mark_bar().encode(
         x=alt.X("Substanzname:N", title="Substanz", sort=None),
         y=alt.Y("Anteil_Prozent:Q", title="Anteil am Rohwasser (%)", stack="zero"),
-        color=alt.Color("Prozessstufe:N", title="Prozessstufe",
-                        scale=alt.Scale(scheme="tableau10")),
+        color=alt.Color("Prozessstufe:N", title="Prozessstufe", scale=alt.Scale(scheme="tableau10")),
         tooltip=["Substanzname", "Prozessstufe", alt.Tooltip("Anteil_Prozent:Q", format=".1f")]
-    ).properties(
-        height=400
-    )
+    ).properties(height=400)
     st.altair_chart(chart, use_container_width=True)
