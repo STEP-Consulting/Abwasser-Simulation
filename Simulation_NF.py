@@ -746,7 +746,8 @@ if not is_ozon:
     h4.metric("Ausgeschl. Konzentrat", f"{fl['q_konz_aus']:.1f} m³/h")
     st.divider()
 
-# =========================================================
+
+    # =========================================================
 # 11. TABELLE & LINIEN-KONZENTRATIONSPROFIL
 # =========================================================
 
@@ -809,13 +810,14 @@ if ausgewählte_substanzen:
     profile_df = pd.DataFrame(profile_rows)
 
     if not profile_df.empty:
+        # HINWEIS: Hier von ":N" auf ":O" (Ordinal) geändert, da Linien eine Reihenfolge benötigen!
         base_chart = alt.Chart(profile_df).encode(
-            x=alt.X("Prozessstufe:N", title="Verfahrensstufe"),
+            x=alt.X("Prozessstufe:O", title="Verfahrensstufe"),
             y=alt.Y("Rel_Konzentration:Q", title="Verbleibende Konzentration (% vom Rohwasser)", scale=alt.Scale(domain=[0, 105])),
             color=alt.Color("Substanz:N", title="Substanz", scale=alt.Scale(scheme="category10")),
             tooltip=[
                 alt.Tooltip("Substanz:N", title="Substanz"),
-                alt.Tooltip("Prozessstufe:N", title="Stufe"),
+                alt.Tooltip("Prozessstufe:O", title="Stufe"),
                 alt.Tooltip("Rel_Konzentration:Q", title="Verbleibend", format=".1f", suffix="%")
             ]
         )
@@ -829,3 +831,4 @@ if ausgewählte_substanzen:
         st.info("Bitte wähle mindestens eine Substanz aus.")
 else:
     st.info("Keine Substanzen ausgewählt.")
+
