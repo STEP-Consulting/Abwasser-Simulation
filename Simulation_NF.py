@@ -4,15 +4,6 @@ Integrierte Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
 1. Bestandssystem: Biologie + Ozonung
 2. Advanced System: Nanofiltration mit Konzentrat-Rückführung, Produkt-GAK und Konzentrat-GAK
 
-Version 5 (Korrekturen gegenüber v4/Eigenversion):
-- Kreislauf wieder geschlossen gelöst (statt 15 Iterationen), inkl. E_rez für CSB
-- Frachtbilanz ohne Doppelzählung des Konzentrats bei aktiver Konzentrat-GAK
-- Konzentrat-GAK mit eigenem Matrix-Faktor (DOC im Konzentrat aufkonzentriert)
-- GAK-Elimination wahlweise als Mittelwert über die Standzeit statt Momentaufnahme
-- Energie/Kohle: nur die tatsächlich durchströmten Ströme, Bezug auf Q_Zulauf
-- Fließbild: saubere Verzweigung, Mischpunkt hinter Konz-GAK, Bypass vor der Produkt-GAK
-- Ozon-Diagramm: C_Bio_Ablauf wird wieder übergeben
-- Passwort direkt im Skript hinterlegt
 """
 
 import hmac
