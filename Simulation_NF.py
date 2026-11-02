@@ -748,5 +748,159 @@ if not is_ozon:
     st.divider()
 
 
+    # -*- coding: utf-8 -*-
+"""
+Diagramm-Vorschlag für die Abwasser-Simulation (Ersatz für den Abschnitt
+"Verursacher- & Stufen-Analyse" am Ende von abwasser_simulation_v5.py).
+
+Einbau:
+1. Diesen Code oberhalb des Abschnitts "12. TABELLE & DIAGRAMME" einfügen (oder per import nutzen).
+2. Den alten Diagramm-Block ab st.subheader("📈 Verursacher- & Stufen-Analyse ...") löschen.
+3. Stattdessen aufrufen:
+       zeige_diagramme(df_res, is_ozon, aktivieren_gak, aktivieren_konz_gak)
+
+Gestaltungsidee:
+- Farben haben eine Bedeutung: blau-grün = eliminiert, grau = unbehandelt ausgeschleust, orange = bleibt im Endwasser.
+- Horizontale Balken, Stoffe nach Restanteil sortiert (Problemstoffe oben), Prozentwerte im Balken.
+- Arzneimittel und PFAS getrennt (sie verhalten sich völlig unterschiedlich).
+- Zweites Diagramm: Konzentration vorher/nachher als Hantelplot auf logarithmischer Achse.
+"""
+
+import numpy as np
+import pandas as pd
+import streamlit as st
+import altair as alt
+
+FARBE_BIO = "#2a7f7a"
+FARBE_PROD_GAK = "#5bb5ad"
+FARBE_KONZ_GAK = "#a5d9d3"
+FARBE_OZON = "#5bb5ad"
+FARBE_ABZUG = "#9e9e9e"
+FARBE_REST = "#e4572e"
+
+
+def fracht_daten(df_res, is_ozon, aktivieren_gak, aktivieren_konz_gak):
+    """Bereitet die Frachtanteile je Stoff und Stufe als Rechtecke (Start/Ende) auf.
+    Rückgabe: (langes DataFrame, Stufenliste [(Spalte, Label, Füllfarbe, Textfarbe)], Reihenfolge der Stoffe)."""
+    d = df_res[(df_res["Gruppe"] != "Summenparameter") & (df_res["C_Rohwasser"] > 0)].copy()
+
+    if is_ozon:
+        c_roh = d["C_Rohwasser"]
+        d["Fracht_Biologie_%"] = ((1.0 - d["C_Bio_Ablauf"] / c_roh) * 100.0).clip(lower=0.0)
+        d["Fracht_Ozon_%"] = ((d["C_Bio_Ablauf"] - d["C_Endwasser"]) / c_roh * 100.0).clip(lower=0.0)
+        d["Fracht_Endwasser_%"] = (d["C_Endwasser"] / c_roh * 100.0).clip(lower=0.0)
+        stufen = [
+            ("Fracht_Biologie_%", "Biologie (Abbau / Sorption)", FARBE_BIO, "white"),
+            ("Fracht_Ozon_%", "Ozonung", FARBE_OZON, "black"),
+            ("Fracht_Endwasser_%", "Bleibt im Endwasser", FARBE_REST, "white"),
+        ]
+    else:
+        stufen = [("Fracht_Biologie_%", "Biologie (Abbau / Sorption)", FARBE_BIO, "white")]
+        if aktivieren_gak:
+            stufen.append(("Fracht_Prod_GAK_%", "Produktwasser-GAK", FARBE_PROD_GAK, "black"))
+        if aktivieren_konz_gak:
+            stufen.append(("Fracht_Konz_GAK_%", "Konzentrat-GAK", FARBE_KONZ_GAK, "black"))
+        else:
+            stufen.append(("Fracht_Konz_Abzug_%", "Konzentrat-Abzug (unbehandelt)", FARBE_ABZUG, "black"))
+        stufen.append(("Fracht_Endwasser_%", "Bleibt im Endwasser", FARBE_REST, "white"))
+
+    reihenfolge = d.sort_values("Fracht_Endwasser_%", ascending=False)["Substanzname"].tolist()
+
+    zeilen = []
+    for _, r in d.iterrows():
+        start = 0.0
+        for spalte, label, _, textfarbe in stufen:
+            wert = float(max(0.0, r[spalte]))
+            ende = start + wert
+            zeilen.append({
+                "Substanzname": r["Substanzname"], "Gruppe": r["Gruppe"], "Prozessstufe": label,
+                "Anteil": wert, "Start": start, "Ende": ende, "Mitte": (start + ende) / 2.0,
+                "Label": f"{wert:.0f} %", "Textfarbe": textfarbe,
+            })
+            start = ende
+    return pd.DataFrame(zeilen), stufen, reihenfolge
+
+
+def fracht_chart(df_long, stufen, reihenfolge, mit_ziellinie=False):
+    namen = [s[1] for s in stufen]
+    farben = alt.Scale(domain=namen, range=[s[2] for s in stufen])
+    y = alt.Y("Substanzname:N", sort=reihenfolge, title=None)
+    basis = alt.Chart(df_long).encode(y=y)
+
+    balken = basis.mark_bar(stroke="white", strokeWidth=1).encode(
+        x=alt.X("Start:Q", title="Anteil an der frischen Zulauffracht (%)",
+                scale=alt.Scale(domain=[0, 100], nice=False), axis=alt.Axis(tickCount=5)),
+        x2="Ende:Q",
+        color=alt.Color("Prozessstufe:N", scale=farben, sort=namen,
+                        legend=alt.Legend(orientation="bottom", title=None)),
+        tooltip=["Substanzname:N", "Prozessstufe:N", alt.Tooltip("Anteil:Q", format=".1f", title="Anteil (%)")],
+    )
+
+    text = basis.transform_filter(alt.datum.Anteil >= 7).mark_text(fontSize=11, fontWeight="bold").encode(
+        x="Mitte:Q",
+        text="Label:N",
+        color=alt.Color("Textfarbe:N", scale=None, legend=None),
+    )
+
+    ebenen = [balken, text]
+    if mit_ziellinie:
+        linie = alt.Chart(pd.DataFrame({"x": [80.0], "t": ["80 %-Orientierung"]}))
+        ebenen.append(linie.mark_rule(strokeDash=[5, 4], color="black", strokeWidth=1.5).encode(x="x:Q"))
+        ebenen.append(linie.mark_text(align="left", dx=4, dy=-4, fontSize=10, baseline="bottom", color="black")
+                      .encode(x="x:Q", y=alt.value(0), text="t:N"))
+
+    return alt.layer(*ebenen).properties(height=alt.Step(30))
+
+
+def konzentrations_chart(df_res):
+    d = df_res[(df_res["Gruppe"] != "Summenparameter") & (df_res["C_Rohwasser"] > 0)][
+        ["Substanzname", "Gruppe", "C_Rohwasser", "C_Endwasser"]].copy()
+    reihenfolge = d.sort_values("C_Rohwasser", ascending=False)["Substanzname"].tolist()
+    lang = d.melt(id_vars=["Substanzname", "Gruppe"], value_vars=["C_Rohwasser", "C_Endwasser"],
+                  var_name="Messstelle", value_name="Konzentration")
+    lang["Messstelle"] = lang["Messstelle"].map({"C_Rohwasser": "Rohwasser", "C_Endwasser": "Endwasser"})
+
+    skala = alt.Scale(type="symlog")
+    achse = alt.Axis(values=[0, 10, 100, 1000, 10000], title="Konzentration (ng/L, logarithmisch)")
+    y = alt.Y("Substanzname:N", sort=reihenfolge, title=None)
+
+    verbindung = alt.Chart(d).mark_rule(color="#bdbdbd", strokeWidth=3).encode(
+        y=y, x=alt.X("C_Rohwasser:Q", scale=skala, axis=achse), x2="C_Endwasser:Q")
+    punkte = alt.Chart(lang).mark_point(filled=True, size=110, opacity=1).encode(
+        y=y, x=alt.X("Konzentration:Q", scale=skala, axis=achse),
+        color=alt.Color("Messstelle:N",
+                        scale=alt.Scale(domain=["Rohwasser", "Endwasser"], range=["#3d3d3d", FARBE_REST]),
+                        legend=alt.Legend(orientation="bottom", title=None)),
+        tooltip=["Substanzname:N", "Messstelle:N", alt.Tooltip("Konzentration:Q", format=".1f")])
+
+    return alt.layer(verbindung, punkte).properties(height=alt.Step(28))
+
+
+def zeige_diagramme(df_res, is_ozon, aktivieren_gak, aktivieren_konz_gak):
+    st.subheader("📈 Auswertung")
+    tab1, tab2 = st.tabs(["Wohin geht die Fracht?", "Konzentrationen vorher / nachher"])
+
+    with tab1:
+        daten, stufen, reihenfolge = fracht_daten(df_res, is_ozon, aktivieren_gak, aktivieren_konz_gak)
+        st.caption("Lesehilfe: Von links nach rechts steht zuerst, was eliminiert wird (blau-grün), "
+                   "dann was unbehandelt ausgeschleust wird (grau). Der orange Anteil bleibt im Endwasser. "
+                   "Stoffe mit dem größten Restanteil stehen oben.")
+        for gruppe, titel in (("PhAC", "Arzneimittel"), ("PFAS", "PFAS")):
+            teil = daten[daten["Gruppe"] == gruppe]
+            if teil.empty:
+                continue
+            ordnung = [n for n in reihenfolge if n in set(teil["Substanzname"])]
+            st.markdown(f"**{titel}**")
+            st.altair_chart(fracht_chart(teil, stufen, ordnung, mit_ziellinie=(gruppe == "PhAC")),
+                            use_container_width=True)
+        st.caption("Die gestrichelte 80 %-Linie bei den Arzneimitteln ist nur eine Orientierung. "
+                   "Die Richtlinie bewertet die Entfernung über Indikatorstoffe, nicht über diese Bilanzgrenze.")
+
+    with tab2:
+        st.caption("Jede Linie verbindet die Zulaufkonzentration (dunkel) mit der Konzentration im Endwasser (orange). "
+                   "Je länger die Linie, desto stärker die Reduktion.")
+        st.altair_chart(konzentrations_chart(df_res), use_container_width=True)
+
+
 
 
