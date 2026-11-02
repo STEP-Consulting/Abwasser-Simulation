@@ -656,7 +656,7 @@ with tab_sens:
             legend=dict(orientation="h", y=-0.15), margin=dict(l=150, r=25, t=60, b=50),
             font=dict(family="Arial", color="black"),
         )
-        st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(sens_df[["Parameter", "Einheit", "Wert_niedrig", "Ergebnis_niedrig",
-                              "Basis", "Wert_hoch", "Ergebnis_hoch"]],
-                     use_container_width=True, hide_index=True)
+       # Flexible Anzeige der Sensitivitätstabelle ohne KeyError
+        vorhandene_spalten = [c for c in ["Parameter", "Einheit", "Wert_niedrig", "Ergebnis_niedrig",
+                                          "Basis", "Wert_hoch", "Ergebnis_hoch"] if c in sens_df.columns]
+        st.dataframe(sens_df[vorhandene_spalten], use_container_width=True, hide_index=True)
