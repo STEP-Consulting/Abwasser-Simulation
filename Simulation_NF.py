@@ -4,7 +4,7 @@ Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
 Oberfläche (Streamlit). Der Rechenkern liegt in simulation.py.
 
 Start:  streamlit run app.py
-Passwort: in .streamlit/secrets.toml  ->  password = "..."   oder Umgebungsvariable APP_PASSWORD
+Passwort: in .streamlit/secrets.toml  ->  password = "..."    oder Umgebungsvariable APP_PASSWORD
 """
 
 import hmac
@@ -659,19 +659,14 @@ with tab_sens:
             name="hoher Wert", marker=dict(color="#888888", line=dict(color="black", width=1.5)),
             customdata=sens_df["Ergebnis_hoch"], hovertemplate="%{customdata:.3f}<extra>hoher Wert</extra>"))
         fig.update_layout(
-            barmode="overlay", template="plotly_white", height=max(380, 40 * len(sens_df) + 140),
-            title=f"{st.session_state.get('sens_ziel', ziel_name)} – Abweichung vom Basiswert ({basis:,.2f})",
-            xaxis=dict(title="Abweichung vom Basiswert", zeroline=True, zerolinecolor="black",
-                       showline=True, linecolor="black"),
-            yaxis=dict(showline=True, linecolor="black"),
-            legend=dict(orientation="h", y=-0.2), margin=dict(l=50, r=25, t=60, b=60),
+            barmode="group", template="plotly_white", height=max(400, len(sens_df) * 35),
+            title=f"Sensitivität für <b>{ziel_name}</b> (Abweichung vom Basiswert: {basis:.2f})",
+            xaxis=dict(title="Delta zum Basiswert", showline=True, linecolor="black"),
+            yaxis=dict(autorange="reversed", showline=True, linecolor="black"),
+            legend=dict(orientation="h", y=-0.15), margin=dict(l=150, r=25, t=60, b=50),
             font=dict(family="Arial", color="black"),
         )
         st.plotly_chart(fig, use_container_width=True)
-
-        tab_anz = sens_df.sort_values("Spanne", ascending=False).copy()
-        tab_anz = tab_anz.rename(columns={"Ergebnis_niedrig": "Ergebnis (niedrig)",
-                                          "Ergebnis_hoch": "Ergebnis (hoch)"})
-        for c in ["Ergebnis (niedrig)", "Ergebnis (hoch)", "Basis", "Spanne"]:
-            tab_anz[c] = tab_anz[c].round(3)
-        st.dataframe(tab_anz, use_container_width=True, hide_index=True)
+        st.dataframe(sens_df[["Parameter", "Einheit", "Wert_niedrig", "Ergebnis_niedrig",
+                              "Basis", "Wert_hoch", "Ergebnis_hoch"]],
+                     use_container_width=True, hide_index=True)
