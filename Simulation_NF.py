@@ -488,16 +488,6 @@ with tab_ein:
 
     st.divider()
 
-    # Biologie
-    st.header("🧫 Biologie-Kenndaten")
-    b1, b2, b3 = st.columns(3)
-    b1.metric("Effektive HRT Belebung", f"{kenn['hrt_eff_h']:.1f} h",
-              delta=(f"{kenn['hrt_eff_h'] - hrt_h:+.1f} h durch Rückführung" if not ist_ozon else None),
-              delta_color="off")
-    b2.metric("Spez. Überschussschlamm", f"{kenn['ress_eff_g_m3']:.0f} g/m³")
-    b3.metric("Belebungsvolumen", f"{fmt_de(kenn['v_bb_m3'])} m³")
-    st.divider()
-
     # Mengenströme
     if not ist_ozon:
         st.header("🔁 Mengenströme")
