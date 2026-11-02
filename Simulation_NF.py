@@ -1,52 +1,65 @@
 # -*- coding: utf-8 -*-
 """
-Integrierte Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
-1. Bestandssystem: Biologie + Ozonung
-2. Advanced System: Nanofiltration mit Konzentrat-Rückführung, Produkt-GAK und Konzentrat-GAK
+Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
+Oberfläche (Streamlit). Der Rechenkern liegt in simulation.py.
 
+Start:  streamlit run app.py
+Passwort: in .streamlit/secrets.toml  ->  password = "..."   oder Umgebungsvariable APP_PASSWORD
 """
 
 import hmac
-import streamlit as st
-import streamlit.components.v1 as components
-import pandas as pd
-import numpy as np
-import altair as alt
-import plotly.graph_objects as go
-from scipy.stats import lognorm
+import json
+import os
 from html import escape
 
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+import streamlit.components.v1 as components
+
+import simulation as sim
+
 # =========================================================
-# 1. STREAMLIT-KONFIGURATION & PASSWORDSCHUTZ
+# 1. KONFIGURATION & PASSWORTSCHUTZ
 # =========================================================
 
 st.set_page_config(
     page_title="Abwasser-Simulation: Verfahrensvergleich",
     page_icon="💧",
-    layout="wide"
+    layout="wide",
 )
 
-# Festes Passwort direkt im Skript hinterlegen
-PASSWORD = "Passwort"  # Hier Wunschpasswort eintragen
+
+def hole_passwort():
+    try:
+        return st.secrets["password"]
+    except Exception:
+        return os.environ.get("APP_PASSWORD")
+
 
 def check_password():
-    """Gibt True zurück, wenn das Passwort korrekt eingegeben wurde."""
-    if "password_correct" not in st.session_state:
-        st.session_state["password_correct"] = False
-
-    if st.session_state["password_correct"]:
+    """True, wenn das Passwort korrekt eingegeben wurde."""
+    if st.session_state.get("password_correct", False):
         return True
 
+    soll = hole_passwort()
     st.subheader("🔒 Passwortgeschützter Bereich")
+    if not soll:
+        st.error("Es ist kein Passwort konfiguriert. Bitte `password` in `.streamlit/secrets.toml` "
+                 "(bzw. in den Secrets der Hosting-Plattform) oder die Umgebungsvariable "
+                 "`APP_PASSWORD` setzen.")
+        return False
+
     pwd = st.text_input("Bitte gib das Passwort ein, um die Simulation zu starten:", type="password")
-    
     if st.button("Anmelden"):
-        if pwd == PASSWORD:
+        if hmac.compare_digest(pwd.encode("utf-8"), str(soll).encode("utf-8")):
             st.session_state["password_correct"] = True
             st.rerun()
         else:
             st.error("Falsches Passwort!")
     return False
+
 
 if not check_password():
     st.stop()
@@ -55,249 +68,123 @@ st.title("💧 Abwasser-Simulation: Verfahrens- & Konzeptvergleich")
 
 with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
     st.markdown("""
-    Willkommen bei der **Abwasser-Simulation**! Mit diesem Werkzeug kannst du verschiedene Verfahren zur Abwasserreinigung (Spurenstoff- und PFAS-Elimination) direkt miteinander vergleichen.
+    Mit diesem Werkzeug kannst du Verfahren zur Spurenstoff- und PFAS-Entfernung vergleichen
+    (Bestandssystem **Ozonung** gegenüber **Nanofiltration**, optional mit Aktivkohle).
 
-    ---
+    **So bedienst du die Simulation**
 
-    ### So bedienst du die Simulation
+    1. **Konzept wählen** (Seitenleiste): bestimmt die *Einzelansicht* und das Fließbild.
+    2. **Parameter anpassen:** Alle Einstellungen in der Seitenleiste gelten auch für die
+       Registerkarten *Vergleich* und *Sensitivität*.
+    3. **Zulaufkonzentrationen** unter dem Fließbild anpassen.
+    4. **Ergebnisse** in den drei Registerkarten ansehen:
+       * *Einzelkonzept:* Kennzahlen, Mengenströme, Energie, Stoffbilanz, Diagramme.
+       * *Vergleich:* Ozonung und NF nebeneinander mit denselben Eingaben.
+       * *Sensitivität:* Welche Parameter bewegen das Ergebnis am stärksten?
 
-    1. **Verfahren auswählen (Seitenleiste links):**
-       * Wähle oben links zwischen dem **Bestandssystem** (Klassische Ozonung) und dem **Advanced System** (Nanofiltration/NF).
-    
-    2. **Parameter anpassen:**
-       * **Hydraulik:** Stelle die Wassermenge ($Q$) und evtl. einen Bypass ein.
-       * **Reinigungsstufen:** Schalte nach Bedarf die *Produktwasser-GAK* oder die *Konzentrat-GAK* an oder aus.
-       * **Stoffkonzentrationen:** Weiter unten kannst du die Zulaufwerte für Schadstoffe (z. B. PFAS, Medikamente) individuell anpassen.
+    **Wichtige Hinweise**
 
-    3. **Ergebnisse ablesen:**
-       * Die Simulation rechnet alle Frachten und Konzentrationen **automatisch in Echtzeit** um.
-       * Achte ganz oben im Dashboard auf die **Ampel-Indikatoren**: Sie zeigen dir sofort, ob gesetzliche Grenzwerte oder Projekt-Szenarioziele eingehalten werden.
-
-    ---
-
-    ### Wie funktioniert das Advanced-Konzept? (Kurzerklärt)
-
-    * **Das Membran-Prinzip (NF):** Die Nanofiltration hält Schadstoffe wie PFAS extrem effizient zurück. Dabei entstehen zwei Ströme: gereinigtes *Permeat* (Hauptstrom) und aufkonzentriertes *Konzentrat*.
-    * **Kreislauf-Rückführung:** Ein Teil des Konzentrats wird zurück in die Biologie geleitet, um den Abbau zu maximieren.
-    * **Konzentrat-GAK & Vermischung:** Das restliche Konzentrat läuft durch einen Aktivkohlefilter (GAK) und wird anschließend wieder sauber mit dem Hauptstrom vermischt.
-
-    > ℹ️ **Tipp:** Für weitere Informationen, lade das Begleitdokument ganz unten in der Seitenleiste herunter.
+    * **Produktwasser** = Permeat + Bypass (ggf. nach Produktwasser-GAK).
+      **Endwasser** = Produktwasser, bei aktiver Konzentrat-GAK zusätzlich das behandelte, wieder
+      zugemischte Konzentrat. Ohne Konzentrat-GAK wird das Konzentrat abgezogen.
+    * Viele Parameter sind Platzhalter, die mit Pilotdaten kalibriert werden sollen.
+    * Der **PFOA+PFOS-Wert** ist ein eigener Szenario-Zielwert, kein gesetzlicher Grenzwert.
     """)
 
 # =========================================================
-# 2. STOFFDATENBANK & PARAMETER
-# =========================================================
-
-base_data = {
-    "Substanzname": [
-        "CSB", "BSB5",
-        "PFOA", "PFOS", "TFA", "PFHxA", "PFBS", "PFNA",
-        "Diclofenac", "Ibuprofen", "Carbamazepin",
-        "Paracetamol", "Naproxen"
-    ],
-    "Gruppe": [
-        "Summenparameter", "Summenparameter",
-        "PFAS", "PFAS", "PFAS", "PFAS", "PFAS", "PFAS",
-        "PhAC", "PhAC", "PhAC", "PhAC", "PhAC"
-    ],
-    "Einheit": [
-        "mg/L", "mg/L",
-        "ng/L", "ng/L", "ng/L", "ng/L", "ng/L", "ng/L",
-        "ng/L", "ng/L", "ng/L", "ng/L", "ng/L"
-    ],
-    "MW": [
-        0, 0,
-        414.0, 500.0, 114.0, 314.1, 300.1, 564.1,
-        318.14, 206.28, 236.27, 151.17, 230.26
-    ],
-    "pKa": [
-        0.0, 0.0,
-        0.5, -3.27, 0.23, -0.16, -3.31, -0.21,
-        4.08, 4.4, 13.9, 9.86, 4.15
-    ],
-    "Ladung_z": [
-        0, 0,
-        -1, -1, -1, -1, -1, -1,
-        -1, -1, 0, 0, -1
-    ],
-    "Log_Kow": [
-        0.0, 0.0,
-        4.67, 4.49, -0.2, 3.99, 1.05, 5.02,
-        4.64, 3.68, 2.45, 0.49, 2.82
-    ],
-    "Kd_m3_kg": [
-        0.05, 0.02,
-        0.329, 2.226, 0.0, 0.15, 0.007, 2.5,
-        0.016, 0.007, 0.0, 0.0, 0.013
-    ],
-    "k_biol_L_gSS_d": [
-        0, 3.5,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.1, 21.0, 0.01, 3.5, 1.0
-    ],
-    "KF": [
-        0.0, 0.0,
-        0.29122326, 0.07315197, 0.5, 0.50608802, 1.15938066, 0.5,
-        0.8865, 45.8, 24.4341655, 37.0566988, 12.1398782
-    ]
-}
-
-df_stoff = pd.DataFrame(base_data)
-
-default_concentrations = {
-    "CSB": 450.0, "BSB5": 220.0,
-    "PFOA": 300.0, "PFOS": 250.0, "TFA": 1000.0, "PFHxA": 400.0, "PFBS": 350.0, "PFNA": 150.0,
-    "Diclofenac": 2000.0, "Ibuprofen": 5000.0, "Carbamazepin": 1500.0, "Paracetamol": 3000.0, "Naproxen": 1200.0
-}
-
-OZON_PARAMETER = {
-    "Diclofenac": {"k_o3": 5.26e5, "k_oh": 7.4e9},
-    "Ibuprofen": {"k_o3": 10.0, "k_oh": 7.5e9},
-    "Carbamazepin": {"k_o3": 3.00e5, "k_oh": 8.8e9},
-    "Paracetamol": {"k_o3": 9.44e4, "k_oh": 5.2e9},
-    "Naproxen": {"k_o3": 4.42e3, "k_oh": 9.3e9},
-}
-
-# =========================================================
-# 3. SEITENLEISTE
+# 2. SEITENLEISTE
 # =========================================================
 
 st.sidebar.header("⚙️ Verfahrensauswahl")
-
 verfahrens_wahl = st.sidebar.radio(
-    "Konzept",
-    ["Bestandssystem (Ozonung)", "Nanofiltration (NF)"]
+    "Konzept (Einzelansicht & Fließbild)",
+    ["Bestandssystem (Ozonung)", "Nanofiltration (NF)"],
 )
-
-is_ozon = (verfahrens_wahl == "Bestandssystem (Ozonung)")
+ist_ozon = (verfahrens_wahl == "Bestandssystem (Ozonung)")
+st.sidebar.caption("Die Registerkarten *Vergleich* und *Sensitivität* nutzen immer alle Einstellungen unten.")
 
 with st.sidebar.expander("🔀 Hydraulik & Mengenströme", expanded=True):
     q_feed = st.slider("Rohwasserzulauf Q (m³/h)", 10.0, 500.0, 100.0, 5.0)
-    if not is_ozon:
-        bypass_fraction = st.slider("Bypass-Anteil Bioablauf", 0.0, 0.80, 0.0, 0.05)
+    bypass = st.slider("Bypass-Anteil Bioablauf (nur NF)", 0.0, 0.80, 0.0, 0.05)
+
+with st.sidebar.expander("🧪 Ozonung", expanded=ist_ozon):
+    ozon_dosis = st.slider("Ozon-Dosis (mg O₃ / L)", 1.0, 10.0, 4.0, 0.5)
+    opex_ozon = st.slider("Spezifische Betriebskosten Ozonung (€/m³, Richtwert)", 0.010, 0.050, 0.018, 0.001)
+
+with st.sidebar.expander("🧬 Nanofiltration (Membran)", expanded=not ist_ozon):
+    recovery = st.slider("Permeatausbeute Y", 0.50, 0.95, 0.80, 0.05)
+    recycle = st.slider("Konzentrat-Rückführung in die Biologie (Anteil)", 0.0, 0.90, 0.20, 0.05)
+    mwco = st.slider("Trenngrenze MWCO bei 90 % Rückhalt (Da)", 50, 500, 200, 10)
+    zeta = st.slider("Zeta-Potential (mV)", -30.0, 0.0, -15.0, 1.0)
+    sigma = st.slider("Porenweitenverteilung (σ)", 0.1, 0.6, 0.3, 0.05)
+    delta_p = st.slider("Membrandruck ΔP_NF (bar)", 4.0, 25.0, 10.0, 0.5)
+
+with st.sidebar.expander("🪨 Aktivkohle (GAK)", expanded=False):
+    prod_gak = st.checkbox("Produktwasser-GAK aktivieren", value=False)
+    konz_gak = st.checkbox("Konzentrat-GAK aktivieren (behandeltes Konzentrat wird wieder zugemischt)",
+                           value=False)
+
+    prod_ebct, prod_tage, prod_doc, prod_dp = 15.0, 180, 0.35, 0.6
+    konz_ebct, konz_tage, konz_doc, konz_dp = 15.0, 180, 0.35, 0.6
+    r_doc = 0.90
+
+    if prod_gak:
+        st.markdown("**Produktwasser-GAK**")
+        prod_ebct = st.slider("EBCT Produktwasser (min)", 5.0, 30.0, 15.0, 1.0)
+        prod_tage = st.slider("Standzeit bis Kohletausch Produktwasser (Tage)", 30, 730, 180, 30)
+        prod_doc = st.slider("Matrix-Faktor Produktwasser (DOC-Konkurrenz)", 0.1, 0.8, 0.35, 0.05)
+        prod_dp = st.slider("Druckverlust Produktwasser-GAK (bar)", 0.2, 2.0, 0.6, 0.1)
+    if konz_gak:
+        st.markdown("**Konzentrat-GAK**")
+        konz_ebct = st.slider("EBCT Konzentrat (min)", 5.0, 30.0, 15.0, 1.0)
+        konz_tage = st.slider("Standzeit bis Kohletausch Konzentrat (Tage)", 30, 730, 180, 30)
+        konz_doc = st.slider("Matrix-Faktor Konzentrat (vor DOC-Aufkonzentrierung)", 0.1, 0.8, 0.35, 0.05)
+        konz_dp = st.slider("Druckverlust Konzentrat-GAK (bar)", 0.2, 2.0, 0.6, 0.1)
+        r_doc = st.slider("DOC-Rückhalt der NF", 0.50, 0.99, 0.90, 0.01,
+                          help="Bestimmt, wie stark der DOC im Konzentrat aufkonzentriert wird.")
+    if prod_gak or konz_gak:
+        st.markdown("**Gemeinsame GAK-Einstellungen**")
+        mittelwert = st.checkbox("Mittlere Elimination über die Standzeit (statt Momentaufnahme am Ende)",
+                                 value=True)
+        lastabhaengig = st.checkbox("Lastabhängige Kapazität (Freundlich, experimentell)", value=False,
+                                    help="BV50 wird mit (C_Zulauf / C_NF-Zulauf)^(1/n − 1) skaliert.")
+        n_inv = st.slider("Freundlich 1/n (Platzhalter)", 0.2, 0.9, 0.5, 0.05) if lastabhaengig else 0.5
     else:
-        bypass_fraction = 0.0
-
-has_bypass = (not is_ozon) and (bypass_fraction > 0.0)
-
-gak_ebct, gak_delta_p, gak_standzeit_tage, doc_faktor = 0.0, 0.0, 0, 0.35
-gak_mittelwert, r_doc = True, 0.90
-
-if is_ozon:
-    with st.sidebar.expander("🧪 Ozonung", expanded=True):
-        ozon_dosis = st.slider("Ozon-Dosis (mg O₃ / L)", 1.0, 10.0, 4.0, 0.5)
-    aktivieren_gak = False
-    aktivieren_konz_gak = False
-else:
-    ozon_dosis = 0.0
-
-if not is_ozon:
-    with st.sidebar.expander("🧬 Nanofiltration (Membran)", expanded=True):
-        recovery = st.slider("Permeatausbeute Y", 0.50, 0.95, 0.80, 0.05)
-        recycle_fraction = st.slider("Konzentrat-Rückführung in die Biologie (Anteil)", 0.0, 0.90, 0.20, 0.05)
-        mwco = st.slider("Trenngrenze MWCO bei 90 % Rückhalt (Da)", 50, 500, 200, 10)
-        zeta_pot = st.slider("Zeta-Potential (mV)", -30.0, 0.0, -15.0, 1.0)
-        sigma_poren = st.slider("Porenweitenverteilung (σ)", 0.1, 0.6, 0.3, 0.05)
-        delta_p = st.slider("Membrandruck ΔP_NF (bar)", 4.0, 25.0, 10.0, 0.5)
-
-    with st.sidebar.expander("🪨 GAK-Polishing & Konzentrat-GAK", expanded=False):
-        aktivieren_gak = st.checkbox("Produktwasser-GAK aktivieren", value=False)
-        aktivieren_konz_gak = st.checkbox("Konzentrat-GAK (Restkonzentrat-Behandlung & Vermischung)", value=True)
-
-        if aktivieren_gak or aktivieren_konz_gak:
-            gak_ebct = st.slider("Kontaktzeit EBCT (min)", 5.0, 30.0, 15.0, 1.0)
-            gak_delta_p = st.slider("GAK-Druckverlust ΔP (bar)", 0.2, 2.0, 0.6, 0.1)
-            gak_standzeit_tage = st.slider("Filter-Standzeit bis zum Kohletausch (Tage)", 30, 365, 180, 30)
-            gak_mittelwert = st.checkbox(
-                "Mittlere Elimination über die Standzeit (statt Momentaufnahme am Standzeitende)", value=True,
-                help="Realistisch ist der Mittelwert über den Zyklus bis zum Kohletausch.")
-            doc_faktor = st.slider("Matrix-Faktor Produktwasser (DOC-Konkurrenz)", 0.1, 0.8, 0.35, 0.05)
-            if aktivieren_konz_gak:
-                r_doc = st.slider("DOC-Rückhalt der NF (für Konzentrat-GAK)", 0.50, 0.99, 0.90, 0.01,
-                                  help="Bestimmt, wie stark der DOC im Konzentrat aufkonzentriert wird.")
-else:
-    recovery, recycle_fraction, mwco, zeta_pot, sigma_poren, delta_p = 0.8, 0.2, 200, -15.0, 0.3, 0.0
-
-mwco_median = mwco / np.exp(1.2816 * sigma_poren)
+        mittelwert, lastabhaengig, n_inv = True, False, 0.5
 
 with st.sidebar.expander("🧫 Vorklärung & Biologie", expanded=False):
-    vkl_option = st.selectbox("Vorklärung Verweilzeit", ["0,75 - 1 h", "1,5 - 2 h", "> 2,5 h"], index=1)
-    eta_vorklaerung = {"0,75 - 1 h": 0.30, "1,5 - 2 h": 0.35, "> 2,5 h": 0.40}[vkl_option]
+    vkl_option = st.selectbox("Vorklärung Verweilzeit", list(sim.VORKLAERUNG_ETA.keys()), index=1)
     hrt_h = st.number_input("Aufenthaltszeit Belebung HRT (h)", 2.0, 48.0, 12.0, 1.0)
     srt = st.number_input("Schlammalter SRT (Tage)", 0.1, 100.0, 15.0, 1.0)
     x_ts = st.number_input("Trockensubstanz X_TS (kg/m³)", 0.5, 8.0, 3.5, 0.1)
-    f_s_csb = st.number_input("Inerter gelöster CSB-Anteil f_S (DWA-A 131)", 0.0, 0.20, 0.05, 0.01)
+    f_s = st.number_input("Inerter gelöster CSB-Anteil f_S (DWA-A 131)", 0.0, 0.20, 0.05, 0.01)
     if srt * 24.0 <= hrt_h:
         st.warning("Schlammalter muss größer als die Aufenthaltszeit sein.")
 
 with st.sidebar.expander("⚖️ Abwasserverordnung (AbwV)", expanded=False):
-    groessenklasse = st.selectbox("Anlagengrößenklasse",
-                                  ["Größenklasse 1", "Größenklasse 2", "Größenklasse 3", "Größenklasse 4",
-                                   "Größenklasse 5"], index=3)
-
-grenzwerte = {
-    "Größenklasse 1": {"CSB": 150.0, "BSB5": 40.0},
-    "Größenklasse 2": {"CSB": 110.0, "BSB5": 25.0},
-    "Größenklasse 3": {"CSB": 90.0, "BSB5": 20.0},
-    "Größenklasse 4": {"CSB": 90.0, "BSB5": 20.0},
-    "Größenklasse 5": {"CSB": 75.0, "BSB5": 15.0}
-}
-grenzwert_csb = grenzwerte[groessenklasse]["CSB"]
-grenzwert_bsb5 = grenzwerte[groessenklasse]["BSB5"]
-
-ETA_PUMPE = 0.70
-BETRIEBSSTUNDEN_JAHR = 8760
-PH_SYS_FIX = 7.5
-GAK_SCHUETTDICHTE_KG_M3 = 450.0
-SZENARIO_ZIELWERT_PFOA_PFOS = 300.0
+    groessenklasse = st.selectbox("Anlagengrößenklasse", list(sim.GRENZWERTE_ABWV.keys()), index=3)
+grenzwert_csb = sim.GRENZWERTE_ABWV[groessenklasse]["CSB"]
+grenzwert_bsb5 = sim.GRENZWERTE_ABWV[groessenklasse]["BSB5"]
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📄 Dokumentation")
-
 try:
     with open("Begleitdokument.pdf", "rb") as pdf_file:
-        PDF_BYTE = pdf_file.read()
-
-    st.sidebar.download_button(
-        label="📥 Begleitdokument öffnen / laden",
-        data=PDF_BYTE,
-        file_name="Begleitdokument_Abwasser_Simulation.pdf",
-        mime="application/pdf"
-    )
+        st.sidebar.download_button(
+            label="📥 Begleitdokument öffnen / laden",
+            data=pdf_file.read(),
+            file_name="Begleitdokument_Abwasser_Simulation.pdf",
+            mime="application/pdf",
+        )
 except FileNotFoundError:
     st.sidebar.info("ℹ️ Begleitdokument derzeit nicht verfügbar.")
 
 # =========================================================
-# 4. SIMULATIONSLOGIK: HYDRAULIK
-# =========================================================
-
-def kreislauf_fluesse(q_feed, bypass, Y, r):
-    Y = min(Y, 0.99)
-    a = 1.0 - bypass
-    q_bio = q_feed / (1.0 - r * (1.0 - Y) * a)
-    q_nf = a * q_bio
-    q_bypass = q_bio - q_nf
-    q_perm = Y * q_nf
-    q_konz_ges = q_nf - q_perm
-    q_rez = r * q_konz_ges
-    q_konz_aus = q_konz_ges - q_rez
-    q_prod = q_perm + q_bypass
-    return dict(a=a, q_bio=q_bio, q_nf=q_nf, q_bypass=q_bypass, q_perm=q_perm,
-                q_konz_ges=q_konz_ges, q_rez=q_rez, q_konz_aus=q_konz_aus, q_prod=q_prod)
-
-if is_ozon:
-    fl, q_produkt = None, q_feed
-    hrt_eff_h = hrt_h
-else:
-    fl = kreislauf_fluesse(q_feed, bypass_fraction, recovery, recycle_fraction)
-    q_produkt = fl["q_prod"]
-    hrt_eff_h = hrt_h * q_feed / fl["q_bio"]
-
-# =========================================================
-# 5. DYNAMISCHES PROZESSFLIEßBILD (SCHWARZ-WEISS)
+# 3. PROZESSFLIEßBILD (SVG, schwarz-weiß)
 # =========================================================
 
 st.subheader("🗺️ Anlagen-Prozessfließbild")
+
 
 def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, fl, q_feed):
     parts = []
@@ -363,7 +250,6 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
         parts.append(text(810, 111, "Endwasser", anchor="start"))
     else:
         parts.append(text(600, 15, "Nanofiltration", "subtitle"))
-
         parts.append(line([(375, 100), (535, 100)], arrow=True))
         if has_bypass:
             parts.append(junction(430, 100))
@@ -411,15 +297,16 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
     parts.append("</svg>")
     return "".join(parts)
 
-svg_schema = build_process_svg(
-    is_ozon=is_ozon,
-    has_bypass=has_bypass,
-    aktivieren_gak=aktivieren_gak,
-    aktivieren_konz_gak=aktivieren_konz_gak,
-    fl=fl,
-    q_feed=q_feed
-)
 
+fl_svg = None if ist_ozon else sim.kreislauf_fluesse(q_feed, bypass, recovery, recycle)
+svg_schema = build_process_svg(
+    is_ozon=ist_ozon,
+    has_bypass=(not ist_ozon) and bypass > 0.0,
+    aktivieren_gak=(prod_gak and not ist_ozon),
+    aktivieren_konz_gak=(konz_gak and not ist_ozon),
+    fl=fl_svg,
+    q_feed=q_feed,
+)
 html_schema = f"""
 <div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid #000000; width: 100%; box-sizing: border-box; overflow-x: auto;">
     <div style="min-width: 820px; max-width: 1280px; margin: 0 auto;">{svg_schema}</div>
@@ -429,15 +316,15 @@ components.html(html_schema, height=370, scrolling=False)
 st.divider()
 
 # =========================================================
-# 6. ZULAUFKONZENTRATIONEN
+# 4. ZULAUFKONZENTRATIONEN
 # =========================================================
 
 st.header("🧪 Rohwasser-Zulaufkonzentrationen")
 if "c_roh" not in st.session_state:
-    st.session_state.c_roh = default_concentrations.copy()
+    st.session_state.c_roh = dict(sim.DEFAULT_CONCENTRATIONS)
 
 if st.button("↺ Standardwerte wiederherstellen"):
-    st.session_state.c_roh = default_concentrations.copy()
+    st.session_state.c_roh = dict(sim.DEFAULT_CONCENTRATIONS)
     for key in [k for k in st.session_state.keys() if str(k).startswith("inp_")]:
         del st.session_state[key]
     st.rerun()
@@ -449,7 +336,7 @@ for i, stoff in enumerate(["CSB", "BSB5"]):
             f"{stoff} (mg/L)", min_value=0.0,
             value=float(st.session_state.c_roh[stoff]), step=10.0, key=f"inp_{stoff}")
 
-trace_stoffe = [s for s in default_concentrations if s not in ["CSB", "BSB5"]]
+trace_stoffe = [s for s in sim.DEFAULT_CONCENTRATIONS if s not in ("CSB", "BSB5")]
 for start in range(0, len(trace_stoffe), 4):
     cols = st.columns(4)
     for col, stoff in zip(cols, trace_stoffe[start:start + 4]):
@@ -458,392 +345,333 @@ for start in range(0, len(trace_stoffe), 4):
                 f"{stoff} (ng/L)", min_value=0.0,
                 value=float(st.session_state.c_roh[stoff]), step=50.0, key=f"inp_{stoff}")
 
-df = df_stoff.copy()
-df["C_Rohwasser"] = df["Substanzname"].map(st.session_state.c_roh)
-
-# =========================================================
-# 7. SIMULATIONSLOGIK: STOFFE
-# =========================================================
-
-def berechne_vorklaerung(row, eta):
-    c = float(row["C_Rohwasser"])
-    return c * (1.0 - eta) if row["Gruppe"] == "Summenparameter" else c
-
-df["C_Vorklaerung"] = df.apply(lambda row: berechne_vorklaerung(row, eta_vorklaerung), axis=1)
-
-def berechne_biologie(row, x_ts, srt, hrt_d):
-    c_in = float(row["C_Vorklaerung"])
-    kd = float(row["Kd_m3_kg"])
-    k_bio = float(row["k_biol_L_gSS_d"])
-
-    ress = x_ts * hrt_d / srt
-    e_sorp = (kd * ress) / (1.0 + kd * ress)
-
-    if row["Substanzname"] == "CSB":
-        e_sorp = 0.0
-        e_bio = 1.0 - f_s_csb
-    elif row["Gruppe"] == "Summenparameter":
-        e_bio = (k_bio * srt) / (1.0 + k_bio * srt) if k_bio > 0 else 0.0
-    else:
-        kxh = k_bio * x_ts * hrt_d
-        e_bio = kxh / (1.0 + kxh) if k_bio > 0 else 0.0
-
-    e_total = e_sorp + e_bio - e_sorp * e_bio
-    e_total = float(np.clip(e_total, 0.0, 0.98))
-    c_out = c_in * (1.0 - e_total)
-
-    return pd.Series({
-        "C_Bio_Ablauf": c_out,
-        "Bio_Elimination_%": e_total * 100.0,
-        "Bio_Sorptionsanteil_%": e_sorp * 100.0,
-        "Bio_Abbauanteil_%": e_bio * 100.0
-    })
-
-bio_eff = df.apply(lambda row: berechne_biologie(row, x_ts, srt, hrt_eff_h / 24.0), axis=1)
-df[["C_Bio_Ablauf", "Bio_Elimination_%", "Bio_Sorptionsanteil_%", "Bio_Abbauanteil_%"]] = bio_eff
-
-bio_ref = df.apply(lambda row: berechne_biologie(row, x_ts, srt, hrt_h / 24.0), axis=1)
-df["C_Bio_Ablauf_ref"] = bio_ref["C_Bio_Ablauf"]
-
-def wende_ozon_an(row, dosis):
-    substanz = row["Substanzname"]
-    gruppe = row["Gruppe"]
-    c_in = row["C_Bio_Ablauf"]
-
-    if gruppe == "Summenparameter" or gruppe == "PFAS":
-        return c_in, 0.0
-
-    if gruppe == "PhAC":
-        p = OZON_PARAMETER.get(substanz)
-        ct_o3 = (dosis / 4.0) * 1.5e-3
-        ct_oh = (dosis / 4.0) * 1.0e-10
-
-        if p and p["k_o3"] is not None:
-            restanteil = np.exp(-(p["k_o3"] * ct_o3 + p["k_oh"] * ct_oh))
-            ozon_rem = 1.0 - restanteil
-        else:
-            ozon_rem = 0.85 * min(1.0, dosis / 4.0)
-
-        ozon_rem = float(np.clip(ozon_rem, 0.0, 0.99))
-        c_out = max(0.0, float(c_in * (1.0 - ozon_rem)))
-        return c_out, ozon_rem * 100.0
-
-    return c_in, 0.0
-
-df["alpha"] = np.where(df["Ladung_z"] < 0, 1.0 / (1.0 + 10.0 ** (df["pKa"] - PH_SYS_FIX)), 0.0)
-df["R_size"] = lognorm.cdf(df["MW"], s=sigma_poren, scale=mwco_median)
-df.loc[df["Gruppe"] == "Summenparameter", "R_size"] = 0.0
-
-def get_nf_retention(row):
-    if row["Gruppe"] == "Summenparameter":
-        return 0.0
-    charge_factor = float(np.clip(abs(zeta_pot / 30.0) * row["alpha"] * abs(row["Ladung_z"]), 0.0, 0.95))
-    p_size = float(np.clip(1.0 - row["R_size"], 0.0, 1.0))
-    p_charge = float(np.clip(1.0 - charge_factor, 0.0, 1.0))
-    return float(np.clip(1.0 - (p_size * p_charge), 0.0, 0.99))
-
-df["R_NF"] = df.apply(get_nf_retention, axis=1)
-
-def kreislauf_stoffstrom(c_vkl, E, R, Y, r, q_feed, fl, E_rez=None):
-    if E_rez is None:
-        E_rez = E
-    Y = min(Y, 0.99)
-    cpf = 1.0 - float(np.clip(R, 0.0, 1.0))
-    q_ratio = q_feed / fl["q_bio"]
-    nenner = 1.0 - (1.0 - E_rez) * r * fl["a"] * (1.0 - Y * cpf)
-
-    c_bio = (1.0 - E) * c_vkl * q_ratio / nenner
-    c_perm = c_bio * cpf
-    c_konz = c_bio * (1.0 - Y * cpf) / (1.0 - Y)
-    c_prod = (fl["q_perm"] * c_perm + fl["q_bypass"] * c_bio) / fl["q_prod"]
-    c_zu_bio = (q_feed * c_vkl + fl["q_rez"] * c_konz) / fl["q_bio"]
-    return c_zu_bio, c_bio, c_perm, c_konz, c_prod
-
-def wende_gak_an(c_in, row, ebct, betriebstage, matrix_faktor, mittelwert=True):
-    if row["Gruppe"] == "Summenparameter" or pd.isna(c_in) or c_in <= 0:
-        return (c_in if not pd.isna(c_in) else 0.0), 0.0
-
-    substanz = row["Substanzname"]
-    gruppe = row["Gruppe"]
-    kf = float(row["KF"])
-
-    if kf <= 0.0:
-        return c_in, 0.0
-
-    bed_volumes = 1440.0 * betriebstage / ebct
-
-    if substanz in ["TFA", "PFBS"]:
-        bv_50_base = 4000.0
-    elif gruppe == "PFAS":
-        bv_50_base = 15000.0
-    else:
-        bv_50_base = max(3000.0, kf * 600.0)
-
-    bv_50_eff = bv_50_base * matrix_faktor
-    steepness = 3.5
-    max_rem = 0.98 if gruppe == "PFAS" else 0.99
-
-    def rem_bei_bv(bv):
-        durchbruch = 1.0 / (1.0 + np.exp(-steepness * ((bv / bv_50_eff) - 1.0)))
-        return max_rem * (1.0 - durchbruch)
-
-    if mittelwert:
-        rem = float(np.mean(rem_bei_bv(np.linspace(0.0, bed_volumes, 400))))
-    else:
-        rem = float(rem_bei_bv(bed_volumes))
-
-    rem = float(np.clip(rem, 0.0, 0.99))
-    c_out = max(0.0, float(c_in * (1.0 - rem)))
-    return c_out, rem * 100.0
-
-if (not is_ozon) and aktivieren_konz_gak:
-    y_c = min(recovery, 0.99)
-    aufkonz_doc = (1.0 - y_c * (1.0 - r_doc)) / (1.0 - y_c)
-    doc_faktor_konz = max(0.02, doc_faktor / aufkonz_doc)
-else:
-    aufkonz_doc = 1.0
-    doc_faktor_konz = doc_faktor
-
-# =========================================================
-# 8. HAUPTSCHLEIFE
-# =========================================================
-
-result_rows = []
-for _, row in df.iterrows():
-    c_roh = float(row["C_Rohwasser"])
-    c_vkl = float(row["C_Vorklaerung"])
-    E = float(row["Bio_Elimination_%"]) / 100.0
-    c_bio_ref = float(row["C_Bio_Ablauf_ref"])
-
-    nf_elim_pct = gak_elim_pct = ozon_elim_pct = konz_gak_elim_pct = 0.0
-    f_bio = f_gak = f_konz_gak = f_abzug = f_end = 0.0
-    akkum = 1.0
-    fracht_in = q_feed * c_vkl
-
-    if is_ozon:
-        c_bio = float(row["C_Bio_Ablauf"])
-        c_final, ozon_elim_pct = wende_ozon_an(row, ozon_dosis)
-        c_nach_nf = c_bio  # Für einheitliche Variable im Profil
-    else:
-        r_nf = float(row["R_NF"])
-        nf_elim_pct = r_nf * 100.0
-        E_rez = 0.0 if row["Substanzname"] == "CSB" else E
-
-        c_zu_bio, c_bio, c_perm, c_konz, c_nach_nf = kreislauf_stoffstrom(
-            c_vkl, E, r_nf, recovery, recycle_fraction, q_feed, fl, E_rez=E_rez)
-        akkum = (c_bio / c_bio_ref) if c_bio_ref > 0 else 1.0
-
-        if aktivieren_gak:
-            c_prod_gac, gak_elim_pct = wende_gak_an(c_nach_nf, row, gak_ebct, gak_standzeit_tage,
-                                                    doc_faktor, gak_mittelwert)
-        else:
-            c_prod_gac = c_nach_nf
-
-        q_k = fl["q_konz_aus"]
-        if aktivieren_konz_gak:
-            c_konz_gac, konz_gak_elim_pct = wende_gak_an(c_konz, row, gak_ebct, gak_standzeit_tage,
-                                                         doc_faktor_konz, gak_mittelwert)
-            q_ges_end = q_produkt + q_k
-            c_final = (q_produkt * c_prod_gac + q_k * c_konz_gac) / q_ges_end
-        else:
-            c_konz_gac = c_konz
-            q_ges_end = q_produkt
-            c_final = c_prod_gac
-
-        if fracht_in > 0:
-            f_bio = (E * q_feed * c_vkl + E_rez * fl["q_rez"] * c_konz) / fracht_in * 100.0
-            f_gak = q_produkt * (c_nach_nf - c_prod_gac) / fracht_in * 100.0
-            if aktivieren_konz_gak:
-                f_konz_gak = q_k * (c_konz - c_konz_gac) / fracht_in * 100.0
-            else:
-                f_abzug = q_k * c_konz / fracht_in * 100.0
-            f_end = q_ges_end * c_final / fracht_in * 100.0
-
-    if is_ozon:
-        f_bilanz = np.nan
-    else:
-        f_bilanz = (f_bio + f_gak + f_konz_gak + f_abzug + f_end) if fracht_in > 0 else 100.0
-
-    konz_red = (1.0 - (c_final / c_roh)) * 100.0 if c_roh > 0 else np.nan
-
-    result_rows.append({
-        "Substanzname": row["Substanzname"], "Gruppe": row["Gruppe"], "Einheit": row["Einheit"],
-        "C_Rohwasser": c_roh, "Bio_Elimination_%": row["Bio_Elimination_%"],
-        "C_Bio_Ablauf": c_bio, "C_Nach_NF": c_nach_nf, "Akkumulation_Bio_x": akkum,
-        "R_NF_%": nf_elim_pct, "Ozon_Elimination_%": ozon_elim_pct,
-        "GAK_Elimination_%": gak_elim_pct, "Konz_GAK_Elimination_%": konz_gak_elim_pct,
-        "C_Endwasser": c_final,
-        "Fracht_Biologie_%": f_bio, "Fracht_Prod_GAK_%": f_gak, "Fracht_Konz_GAK_%": f_konz_gak,
-        "Fracht_Konz_Abzug_%": f_abzug, "Fracht_Endwasser_%": f_end,
-        "Bilanzsumme_%": f_bilanz,
-        "Konzentrationsreduktion_%": konz_red
-    })
-
-df_res = pd.DataFrame(result_rows)
-
-# =========================================================
-# 9. DASHBOARD: KERN-METRIKEN
-# =========================================================
-
-verfahren_label = "Bestandssystem (Ozonung)" if is_ozon else f"Nanofiltration (Bypass: {int(bypass_fraction * 100)} %)"
-st.header(f"🎯 Zielwertüberwachung: {verfahren_label}")
-
-def get_concentration(stoff):
-    values = df_res.loc[df_res["Substanzname"] == stoff, "C_Endwasser"].values
-    return float(values[0]) if len(values) else np.nan
-
-csb_end = get_concentration("CSB")
-bsb_end = get_concentration("BSB5")
-pfas_sum_end = df_res.loc[df_res["Gruppe"] == "PFAS", "C_Endwasser"].sum()
-pfoa_pfos_end = float(np.nan_to_num(get_concentration("PFOA")) + np.nan_to_num(get_concentration("PFOS")))
-avg_phac_elim = df_res.loc[df_res["Gruppe"] == "PhAC", "Konzentrationsreduktion_%"].mean()
-
-pfas_ziel_ok = pfoa_pfos_end <= SZENARIO_ZIELWERT_PFOA_PFOS
-
-z1, z2, z3, z4, z5 = st.columns(5)
-z1.metric(f"CSB (max. {grenzwert_csb})", f"{csb_end:.1f} mg/L",
-          delta="Eingehalten" if csb_end <= grenzwert_csb else "Überschritten",
-          delta_color="normal" if csb_end <= grenzwert_csb else "inverse")
-z2.metric(f"BSB5 (max. {grenzwert_bsb5})", f"{bsb_end:.1f} mg/L",
-          delta="Eingehalten" if bsb_end <= grenzwert_bsb5 else "Überschritten",
-          delta_color="normal" if bsb_end <= grenzwert_bsb5 else "inverse")
-z3.metric(f"PFOA + PFOS (Szenario-Ziel {SZENARIO_ZIELWERT_PFOA_PFOS:.0f})", f"{pfoa_pfos_end:.1f} ng/L",
-          delta="Unter Szenario-Zielwert" if pfas_ziel_ok else "Über Szenario-Zielwert",
-          delta_color="normal" if pfas_ziel_ok else "inverse",
-          help="Eigener Szenario-Zielwert des Projekts, kein gesetzlicher Grenzwert.")
-z4.metric("PFAS-Summe", f"{pfas_sum_end:.1f} ng/L")
-z5.metric("Ø Arzneimittel-Red.", f"{avg_phac_elim:.1f}%")
-
-if not is_ozon:
-    abw = (df_res["Bilanzsumme_%"] - 100.0).abs().max()
-    if abw > 1e-6:
-        st.error(f"Massenbilanz nicht geschlossen (max. Abweichung {abw:.3g} %)")
-    else:
-        st.caption("✅ Frachtbilanz geschlossen (Biologie + GAK-Stufen + Konzentrat-Abzug + Endwasser = 100 %).")
-    if not aktivieren_konz_gak:
-        st.caption("ℹ️ Ohne Konzentrat-GAK verlässt das Konzentrat die Anlage als Abzug.")
+# Parameter-Dictionary für den Rechenkern
+p_basis = sim.standard_parameter()
+p_basis.update({
+    "q_feed": q_feed, "bypass": bypass,
+    "ozon_dosis": ozon_dosis, "opex_ozon": opex_ozon,
+    "recovery": recovery, "recycle": recycle, "mwco": float(mwco), "zeta": zeta,
+    "sigma": sigma, "delta_p": delta_p,
+    "prod_gak": prod_gak, "konz_gak": konz_gak,
+    "prod_ebct": prod_ebct, "prod_tage": float(prod_tage), "prod_doc": prod_doc, "prod_dp": prod_dp,
+    "konz_ebct": konz_ebct, "konz_tage": float(konz_tage), "konz_doc": konz_doc, "konz_dp": konz_dp,
+    "r_doc": r_doc, "mittelwert": mittelwert, "lastabhaengig": lastabhaengig, "n_inv": n_inv,
+    "vkl_eta": sim.VORKLAERUNG_ETA[vkl_option],
+    "hrt_h": hrt_h, "srt": srt, "x_ts": x_ts, "f_s": f_s,
+    "c_roh": dict(st.session_state.c_roh),
+})
 
 st.divider()
 
-# =========================================================
-# 10. MENGENSTRÖME (NF)
-# =========================================================
-
-if not is_ozon:
-    st.header("🔁 Mengenströme")
-    h1, h2, h3, h4 = st.columns(4)
-    h1.metric("Biologie-Zulauf Q_bio", f"{fl['q_bio']:.1f} m³/h")
-    h2.metric("NF-Zulauf Q_NF", f"{fl['q_nf']:.1f} m³/h")
-    h3.metric("Rücklaufstrom Q_rez", f"{fl['q_rez']:.1f} m³/h")
-    h4.metric("Ausgeschl. Konzentrat", f"{fl['q_konz_aus']:.1f} m³/h")
-    st.divider()
 
 # =========================================================
-# 11. TABELLE & PLOTLY-DIAGRAMM (Eliminationsverlauf)
+# 5. HILFSFUNKTIONEN FÜR DIE ANZEIGE
 # =========================================================
 
-st.header("📊 Detaillierte Stoffbilanz & Einzelauswertung")
+def fmt_de(wert, stellen=0):
+    """Zahl im deutschen Format (Tausenderpunkt, Dezimalkomma)."""
+    if wert is None or (isinstance(wert, float) and not np.isfinite(wert)):
+        return "–"
+    text = f"{wert:,.{stellen}f}"
+    return text.replace(",", "X").replace(".", ",").replace("X", ".")
 
-display_cols = ["Substanzname", "Gruppe", "Einheit", "C_Rohwasser", "Bio_Elimination_%"]
-if is_ozon:
-    display_cols.append("Ozon_Elimination_%")
-else:
-    display_cols.extend(["R_NF_%"])
-    if aktivieren_gak:
-        display_cols.append("GAK_Elimination_%")
-    if aktivieren_konz_gak:
-        display_cols.append("Konz_GAK_Elimination_%")
-display_cols.extend(["C_Endwasser", "Konzentrationsreduktion_%"])
 
-display_df = df_res[display_cols].copy()
-for col in display_df.columns:
-    if col not in ["Substanzname", "Gruppe", "Einheit"]:
-        display_df[col] = display_df[col].round(2)
+def zeige_zielwerte(kenn, ist_ozon_ansicht, konz_gak_aktiv):
+    pfas_ziel_ok = kenn["pfoa_pfos_end"] <= sim.SZENARIO_ZIELWERT_PFOA_PFOS
+    z1, z2, z3, z4, z5 = st.columns(5)
+    z1.metric(f"CSB (max. {grenzwert_csb:.0f})", f"{kenn['csb_end']:.1f} mg/L",
+              delta="Eingehalten" if kenn["csb_end"] <= grenzwert_csb else "Überschritten",
+              delta_color="normal" if kenn["csb_end"] <= grenzwert_csb else "inverse")
+    z2.metric(f"BSB5 (max. {grenzwert_bsb5:.0f})", f"{kenn['bsb_end']:.1f} mg/L",
+              delta="Eingehalten" if kenn["bsb_end"] <= grenzwert_bsb5 else "Überschritten",
+              delta_color="normal" if kenn["bsb_end"] <= grenzwert_bsb5 else "inverse")
+    z3.metric(f"PFOA + PFOS (Szenario-Ziel {sim.SZENARIO_ZIELWERT_PFOA_PFOS:.0f})",
+              f"{kenn['pfoa_pfos_end']:.1f} ng/L",
+              delta="Unter Szenario-Zielwert" if pfas_ziel_ok else "Über Szenario-Zielwert",
+              delta_color="normal" if pfas_ziel_ok else "inverse",
+              help="Eigener Szenario-Zielwert des Projekts, kein gesetzlicher Grenzwert.")
+    z4.metric("PFAS-Summe (Endwasser)", f"{kenn['pfas_sum_end']:.1f} ng/L")
+    z5.metric("Ø Arzneimittel-Red. (Endwasser)", f"{kenn['avg_phac_red']:.1f} %")
 
-st.dataframe(display_df, use_container_width=True, hide_index=True)
+    if (not ist_ozon_ansicht) and konz_gak_aktiv:
+        st.markdown("**Nur Produktwasser (ohne wieder zugemischtes Konzentrat):**")
+        y1, y2, y3 = st.columns(3)
+        y1.metric("PFOA + PFOS (Produktwasser)", f"{kenn['pfoa_pfos_prod']:.1f} ng/L")
+        y2.metric("PFAS-Summe (Produktwasser)", f"{kenn['pfas_sum_prod']:.1f} ng/L")
+        y3.metric("Ø Arzneimittel-Red. (Produktwasser)", f"{kenn['avg_phac_red_prod']:.1f} %")
 
-st.subheader("📈 Stufen- und Eliminationsanalyse (Plotly)")
 
-# Auswahl einer einzelnen Substanz für das Diagramm
-substanzen_liste = df_res.loc[df_res["Gruppe"] != "Summenparameter", "Substanzname"].tolist()
-ausgewählte_substanz = st.selectbox(
-    "Wähle eine Substanz für das Detaildiagramm aus:",
-    options=substanzen_liste,
-    index=substanzen_liste.index("PFOA") if "PFOA" in substanzen_liste else 0
-)
-
-# Daten für die gewählte Substanz filtern
-substanz_row = df_res[df_res["Substanzname"] == ausgewählte_substanz].iloc[0]
-
-# Eliminierungsdaten dynamisch je nach Verfahren zusammenstellen
-elimination_data = {}
-elimination_data["1. Biologischer Abbau"] = float(substanz_row["Bio_Elimination_%"])
-
-if is_ozon:
-    elimination_data["2. Ozonung"] = float(substanz_row["Ozon_Elimination_%"])
-else:
-    elimination_data["2. Nanofiltration (Rückhalt)"] = float(substanz_row["R_NF_%"])
-    if aktivieren_gak:
-        elimination_data["3. Produktwasser-GAK"] = float(substanz_row["GAK_Elimination_%"])
-    if aktivieren_konz_gak:
-        elimination_data["4. Konzentrat-GAK"] = float(substanz_row["Konz_GAK_Elimination_%"])
-
-# Gesamte Konzentrationsreduktion als Endwert hinzufügen
-elimination_data["Gesamt-Reduktion"] = float(substanz_row["Konzentrationsreduktion_%"])
-
-# Plotly-Funktion ausführen
-def plot_elimination_chart(data_dict):
-    data_dict = {k: v for k, v in data_dict.items() if v is not None}
-    labels = list(data_dict.keys())
-    values = [max(0, min(100, float(v))) for v in data_dict.values()]
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Bar(
-        x=labels,
-        y=values,
-        marker=dict(
-            color="white",
-            line=dict(color="black", width=1.5)
-        ),
-        text=[f"{v:.1f} %" for v in values],
-        textposition="outside",
-        textfont=dict(color="black", size=13),
-        cliponaxis=False
+def plot_konzentrationsverlauf(df_res, substanz, ist_ozon_ansicht):
+    row = df_res[df_res["Substanzname"] == substanz].iloc[0]
+    if ist_ozon_ansicht:
+        labels = ["Rohwasser", "Bioablauf", "Endwasser"]
+        werte = [row["C_Rohwasser"], row["C_Bio_Ablauf"], row["C_Endwasser"]]
+    else:
+        labels = ["Rohwasser", "Bioablauf", "Produktwasser (roh)", "Produktwasser (nach GAK)", "Endwasser"]
+        werte = [row["C_Rohwasser"], row["C_Bio_Ablauf"], row["C_Produktwasser_roh"],
+                 row["C_Produktwasser"], row["C_Endwasser"]]
+    werte = [max(float(w), 1e-3) for w in werte]
+    fig = go.Figure(go.Scatter(
+        x=labels, y=werte, mode="lines+markers+text",
+        text=[f"{w:,.1f}".replace(",", ".") for w in werte], textposition="top center",
+        line=dict(color="black", width=2), marker=dict(size=9, color="white", line=dict(color="black", width=2)),
     ))
-
     fig.update_layout(
-        title=f"Eliminationsleistung für <b>{ausgewählte_substanz}</b>",
-        template="plotly_white",
-        height=420,
-        showlegend=False,
-        margin=dict(l=45, r=25, t=65, b=65),
-        xaxis=dict(
-            title=None,
-            showline=True,
-            linecolor="black",
-            tickfont=dict(size=12, color="black"),
-            showgrid=False
-        ),
-        yaxis=dict(
-            title="Elimination [%]",
-            range=[0, 115],
-            dtick=10,
-            showline=True,
-            linecolor="black",
-            gridcolor="#dddddd",
-            zeroline=True,
-            zerolinecolor="black",
-            tickfont=dict(size=11, color="black")
-        ),
-        bargap=0.4,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        font=dict(family="Arial", color="black")
+        title=f"Konzentrationsverlauf <b>{substanz}</b> ({row['Einheit']})",
+        template="plotly_white", height=400, showlegend=False,
+        yaxis=dict(type="log", title=f"Konzentration ({row['Einheit']}, log)", showline=True, linecolor="black"),
+        xaxis=dict(showline=True, linecolor="black"),
+        margin=dict(l=50, r=25, t=60, b=50), font=dict(family="Arial", color="black"),
     )
-
     return fig
 
-# Diagramm in Streamlit anzeigen
-fig_plotly = plot_elimination_chart(elimination_data)
-st.plotly_chart(fig_plotly, use_container_width=True)
+
+def plot_frachtverteilung(df_res):
+    d = df_res[df_res["Gruppe"] != "Summenparameter"].copy()
+    spalten = [
+        ("Fracht_Biologie_%", "Biologie (Abbau + Sorption)"),
+        ("Fracht_Prod_GAK_%", "Produktwasser-GAK"),
+        ("Fracht_Konz_GAK_%", "Konzentrat-GAK"),
+        ("Fracht_Konz_Abzug_%", "Konzentrat-Abzug"),
+        ("Fracht_Endwasser_%", "Endwasser"),
+    ]
+    muster = ["", "/", "\\", "x", "."]
+    fig = go.Figure()
+    for (col, name), pat in zip(spalten, muster):
+        if d[col].fillna(0).abs().sum() <= 1e-9:
+            continue
+        fig.add_trace(go.Bar(
+            y=d["Substanzname"], x=d[col], name=name, orientation="h",
+            marker=dict(color="white", line=dict(color="black", width=1.2), pattern=dict(shape=pat)),
+        ))
+    fig.update_layout(
+        barmode="stack", title="Frachtverteilung (bezogen auf die Fracht nach der Vorklärung)",
+        template="plotly_white", height=420,
+        xaxis=dict(title="Anteil an der Fracht [%]", range=[0, 100], showline=True, linecolor="black"),
+        yaxis=dict(autorange="reversed"), margin=dict(l=50, r=25, t=60, b=50),
+        legend=dict(orientation="h", y=-0.2), font=dict(family="Arial", color="black"),
+    )
+    return fig
+
+
+# =========================================================
+# 6. REGISTERKARTEN
+# =========================================================
+
+tab_ein, tab_vgl, tab_sens = st.tabs(["📌 Einzelkonzept", "⚖️ Vergleich Ozonung ↔ NF", "🎚️ Sensitivität"])
+
+# ---------------------------------------------------------
+# 6.1 EINZELKONZEPT
+# ---------------------------------------------------------
+with tab_ein:
+    p_ein = dict(p_basis)
+    p_ein["konzept"] = "ozon" if ist_ozon else "nf"
+    res = sim.simuliere(p_ein)
+    df_res, fl, kenn = res["df"], res["fl"], res["kenn"]
+
+    label = ("Bestandssystem (Ozonung)" if ist_ozon
+             else f"Nanofiltration (Bypass: {int(round(bypass * 100))} %)")
+    st.header(f"🎯 Zielwertüberwachung: {label}")
+    zeige_zielwerte(kenn, ist_ozon, konz_gak)
+
+    if not ist_ozon:
+        if kenn["bilanz_abw"] > 1e-6:
+            st.error(f"Massenbilanz nicht geschlossen (max. Abweichung {kenn['bilanz_abw']:.3g} %)")
+        else:
+            st.caption("✅ Frachtbilanz geschlossen (Biologie + GAK-Stufen + Konzentrat-Abzug + Endwasser = 100 %).")
+        if not konz_gak:
+            st.caption("ℹ️ Ohne Konzentrat-GAK verlässt das Konzentrat die Anlage als Abzug; "
+                       "Endwasser = Produktwasser.")
+        if konz_gak:
+            st.caption(f"ℹ️ DOC im Konzentrat {kenn['aufkonz_doc']:.1f}-fach aufkonzentriert → "
+                       f"wirksamer Matrix-Faktor Konzentrat-GAK: {kenn['konz_doc_eff']:.3f}.")
+
+    st.divider()
+
+    # Biologie
+    st.header("🧫 Biologie-Kenndaten")
+    b1, b2, b3 = st.columns(3)
+    b1.metric("Effektive HRT Belebung", f"{kenn['hrt_eff_h']:.1f} h",
+              delta=(f"{kenn['hrt_eff_h'] - hrt_h:+.1f} h durch Rückführung" if not ist_ozon else None),
+              delta_color="off")
+    b2.metric("Spez. Überschussschlamm", f"{kenn['ress_eff_g_m3']:.0f} g/m³")
+    b3.metric("Belebungsvolumen", f"{fmt_de(kenn['v_bb_m3'])} m³")
+    st.divider()
+
+    # Mengenströme
+    if not ist_ozon:
+        st.header("🔁 Mengenströme")
+        h1, h2, h3, h4, h5 = st.columns(5)
+        h1.metric("Biologie-Zulauf", f"{fl['q_bio']:.1f} m³/h",
+                  delta=f"+{(fl['q_bio'] / q_feed - 1.0) * 100.0:.1f} % hydraulisch", delta_color="off")
+        h2.metric("NF-Zulauf", f"{fl['q_nf']:.1f} m³/h")
+        h3.metric("Produktwasser", f"{fl['q_prod']:.1f} m³/h")
+        h4.metric("Rückführung", f"{fl['q_rez']:.1f} m³/h")
+        h5.metric("Konzentrat (Abzug bzw. zur GAK)", f"{fl['q_konz_aus']:.1f} m³/h")
+        st.divider()
+
+    # Energie & Betriebsmittel
+    st.header("⚡ Energie, Betriebsmittel & Kosten")
+    ref = sim.ENERGIE_OZONUNG_AACHEN
+    if ist_ozon:
+        e1, e2, e3 = st.columns(3)
+        e1.metric("Energiebedarf Ozonung (KA Aachen-Sörs 2018)", f"{ref:.3f} kWh/m³",
+                  help="Spezifischer Energiebedarf der Ozonung der KA Aachen-Sörs (2018), je m³ Zulauf.")
+        e2.metric("Jahresenergiebedarf Ozonung", f"{fmt_de(kenn['e_jahr_kwh'])} kWh/a")
+        e3.metric("Jährliche Betriebskosten (pauschal)", f"{fmt_de(kenn['opex_ozon_eur_a'])} €/a")
+    else:
+        e1, e2, e3, e4 = st.columns(4)
+        e1.metric("Spez. Energie NF", f"{kenn['sec_nf']:.2f} kWh/m³ Permeat")
+        e2.metric("Elektrische Leistung gesamt", f"{kenn['p_ges_kw']:.1f} kW")
+        e3.metric("Jahresenergie gesamt", f"{fmt_de(kenn['e_jahr_kwh'])} kWh/a")
+        e4.metric("Spez. Energie je m³ Zulauf", f"{kenn['spez_energie_kwh_m3']:.3f} kWh/m³",
+                  delta=f"{kenn['spez_energie_kwh_m3'] / ref:.1f}× Ozonung", delta_color="off",
+                  help=f"Vergleichswert Ozonung (KA Aachen-Sörs 2018): {ref:.3f} kWh/m³. "
+                       "Die NF-Werte enthalten nur Hochdruckpumpe und GAK-Druckverlust (Untergrenze).")
+        if prod_gak or konz_gak:
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("Kohleverbrauch Produktwasser", f"{kenn['kohle_prod_g_m3']:.1f} g/m³")
+            k2.metric("Kohleverbrauch Konzentrat", f"{kenn['kohle_konz_g_m3']:.1f} g/m³")
+            k3.metric("Kohlebedarf pro Jahr", f"{kenn['kohle_gesamt_t_a']:.1f} t/a")
+            k4.metric("Leistung GAK-Stufen", f"{kenn['p_gak_prod_kw'] + kenn['p_gak_konz_kw']:.1f} kW")
+    st.divider()
+
+    # Tabelle
+    st.header("📊 Detaillierte Stoffbilanz")
+    spalten = ["Substanzname", "Gruppe", "Einheit", "C_Rohwasser", "Bio_Elimination_%"]
+    if ist_ozon:
+        spalten.append("Ozon_Elimination_%")
+    else:
+        spalten.append("R_NF_%")
+        if prod_gak:
+            spalten.append("GAK_Elimination_%")
+        if konz_gak:
+            spalten.append("Konz_GAK_Elimination_%")
+        spalten.append("C_Produktwasser")
+    spalten += ["C_Endwasser", "Konzentrationsreduktion_%"]
+    anzeige = df_res[spalten].copy()
+    for c in anzeige.columns:
+        if c not in ("Substanzname", "Gruppe", "Einheit"):
+            anzeige[c] = anzeige[c].round(2)
+    st.dataframe(anzeige, use_container_width=True, hide_index=True)
+
+    # Diagramme
+    st.subheader("📈 Konzentrationsverlauf und Frachtverteilung")
+    stoffe_liste = df_res.loc[df_res["Gruppe"] != "Summenparameter", "Substanzname"].tolist()
+    gewaehlt = st.selectbox("Substanz für das Verlaufsdiagramm", stoffe_liste,
+                            index=stoffe_liste.index("PFOA") if "PFOA" in stoffe_liste else 0,
+                            key="sel_verlauf")
+    st.plotly_chart(plot_konzentrationsverlauf(df_res, gewaehlt, ist_ozon), use_container_width=True)
+    if not ist_ozon:
+        st.plotly_chart(plot_frachtverteilung(df_res), use_container_width=True)
+
+    csv = df_res.to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig")
+    st.download_button("Ergebnisse als CSV herunterladen", data=csv,
+                       file_name="abwasser_konzept_simulation.csv", mime="text/csv")
+
+# ---------------------------------------------------------
+# 6.2 VERGLEICH
+# ---------------------------------------------------------
+with tab_vgl:
+    st.header("⚖️ Vergleich Ozonung ↔ Nanofiltration")
+    st.caption("Beide Konzepte werden mit denselben Eingaben (Zulauf, Biologie) und den jeweiligen "
+               "Verfahrensparametern aus der Seitenleiste gerechnet.")
+
+    p_o = dict(p_basis)
+    p_o["konzept"] = "ozon"
+    p_n = dict(p_basis)
+    p_n["konzept"] = "nf"
+    r_o, r_n = sim.simuliere(p_o), sim.simuliere(p_n)
+    ko, kn = r_o["kenn"], r_n["kenn"]
+
+    zeilen = [
+        ("Ø Arzneimittel-Reduktion (Endwasser)", "%", "avg_phac_red", 1),
+        ("PFAS-Summe (Endwasser)", "ng/L", "pfas_sum_end", 0),
+        ("PFOA + PFOS (Endwasser)", "ng/L", "pfoa_pfos_end", 1),
+        ("PFAS-Summe (Produktwasser)", "ng/L", "pfas_sum_prod", 0),
+        ("CSB (Endwasser)", "mg/L", "csb_end", 1),
+        ("BSB5 (Endwasser)", "mg/L", "bsb_end", 1),
+        ("Spez. Energiebedarf je m³ Zulauf", "kWh/m³", "spez_energie_kwh_m3", 3),
+        ("Jahresenergie", "kWh/a", "e_jahr_kwh", 0),
+        ("Konzentrat (Abzug bzw. zur GAK)", "m³/h", "q_konz_aus", 1),
+        ("Kohlebedarf", "t/a", "kohle_gesamt_t_a", 1),
+        ("Betriebskosten Ozonung (pauschal)", "€/a", "opex_ozon_eur_a", 0),
+    ]
+    tabelle = pd.DataFrame({
+        "Kennzahl": [z[0] for z in zeilen],
+        "Einheit": [z[1] for z in zeilen],
+        "Ozonung": [fmt_de(ko[z[2]], z[3]) for z in zeilen],
+        "Nanofiltration": [fmt_de(kn[z[2]], z[3]) for z in zeilen],
+    })
+    st.dataframe(tabelle, use_container_width=True, hide_index=True)
+    st.caption("Der Energiewert der Ozonung ist der Referenzwert der KA Aachen-Sörs (2018). Die NF-Werte sind "
+               "eine Untergrenze (nur Hochdruckpumpe und GAK-Druckverlust).")
+
+    d_o = r_o["df"].set_index("Substanzname")
+    d_n = r_n["df"].set_index("Substanzname")
+    stoffe = [s for s in d_o.index if d_o.loc[s, "Gruppe"] != "Summenparameter"]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=stoffe, y=[d_o.loc[s, "Konzentrationsreduktion_%"] for s in stoffe],
+                         name="Ozonung", marker=dict(color="white", line=dict(color="black", width=1.5))))
+    fig.add_trace(go.Bar(x=stoffe, y=[d_n.loc[s, "Konzentrationsreduktion_%"] for s in stoffe],
+                         name="Nanofiltration",
+                         marker=dict(color="#888888", line=dict(color="black", width=1.5))))
+    fig.update_layout(
+        barmode="group", template="plotly_white", height=420,
+        title="Reduktion gegenüber dem Rohwasser (Endwasser)",
+        yaxis=dict(title="Reduktion [%]", range=[0, 105], showline=True, linecolor="black"),
+        xaxis=dict(showline=True, linecolor="black"), legend=dict(orientation="h", y=-0.2),
+        margin=dict(l=50, r=25, t=60, b=60), font=dict(family="Arial", color="black"),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# ---------------------------------------------------------
+# 6.3 SENSITIVITÄT
+# ---------------------------------------------------------
+with tab_sens:
+    st.header("🎚️ Sensitivität (one-at-a-time, NF-Konzept)")
+    st.caption("Jeder Parameter wird einzeln auf einen niedrigen und einen hohen Wert gesetzt, alle anderen "
+               "bleiben wie in der Seitenleiste. GAK-Parameter erscheinen nur bei aktiver GAK.")
+
+    ziel_name = st.selectbox("Zielgröße", list(sim.ZIELGROESSEN.keys()), key="sel_sens_ziel")
+    signatur = json.dumps({"p": p_basis, "ziel": ziel_name}, sort_keys=True, default=str)
+
+    if st.button("Sensitivität berechnen", key="btn_sens"):
+        with st.spinner("Rechne Varianten ..."):
+            st.session_state["sens_df"] = sim.sensitivitaet(p_basis, ziel_name)
+            st.session_state["sens_sig"] = signatur
+            st.session_state["sens_ziel"] = ziel_name
+
+    sens_df = st.session_state.get("sens_df")
+    if sens_df is None:
+        st.info("Wähle eine Zielgröße und klicke auf „Sensitivität berechnen“.")
+    else:
+        if st.session_state.get("sens_sig") != signatur:
+            st.warning("Eingaben oder Zielgröße haben sich geändert – bitte neu berechnen.")
+        basis = float(sens_df["Basis"].iloc[0])
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=sens_df["Parameter"], x=sens_df["Ergebnis_niedrig"] - basis, orientation="h",
+            name="niedriger Wert", marker=dict(color="white", line=dict(color="black", width=1.5)),
+            customdata=sens_df["Ergebnis_niedrig"], hovertemplate="%{customdata:.3f}<extra>niedriger Wert</extra>"))
+        fig.add_trace(go.Bar(
+            y=sens_df["Parameter"], x=sens_df["Ergebnis_hoch"] - basis, orientation="h",
+            name="hoher Wert", marker=dict(color="#888888", line=dict(color="black", width=1.5)),
+            customdata=sens_df["Ergebnis_hoch"], hovertemplate="%{customdata:.3f}<extra>hoher Wert</extra>"))
+        fig.update_layout(
+            barmode="overlay", template="plotly_white", height=max(380, 40 * len(sens_df) + 140),
+            title=f"{st.session_state.get('sens_ziel', ziel_name)} – Abweichung vom Basiswert ({basis:,.2f})",
+            xaxis=dict(title="Abweichung vom Basiswert", zeroline=True, zerolinecolor="black",
+                       showline=True, linecolor="black"),
+            yaxis=dict(showline=True, linecolor="black"),
+            legend=dict(orientation="h", y=-0.2), margin=dict(l=50, r=25, t=60, b=60),
+            font=dict(family="Arial", color="black"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        tab_anz = sens_df.sort_values("Spanne", ascending=False).copy()
+        tab_anz = tab_anz.rename(columns={"Ergebnis_niedrig": "Ergebnis (niedrig)",
+                                          "Ergebnis_hoch": "Ergebnis (hoch)"})
+        for c in ["Ergebnis (niedrig)", "Ergebnis (hoch)", "Basis", "Spanne"]:
+            tab_anz[c] = tab_anz[c].round(3)
+        st.dataframe(tab_anz, use_container_width=True, hide_index=True)
