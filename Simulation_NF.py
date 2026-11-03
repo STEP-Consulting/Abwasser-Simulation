@@ -131,13 +131,13 @@ with st.sidebar.expander("🪨 Aktivkohle (GAK)", expanded=False):
     if prod_gak:
         st.markdown("**Produktwasser-GAK**")
         prod_ebct = st.slider("EBCT Produktwasser (min)", 5.0, 30.0, 15.0, 1.0)
-        prod_tage = st.slider("Standzeit bis Kohletausch Produktwasser (Tage)", 30, 730, 180, 30)
+        prod_tage = st.slider("Standzeit bis Kohletausch Produktwasser (Tage)", 30, 360, 30, 30)
         prod_doc = st.slider("Matrix-Faktor Produktwasser (DOC-Konkurrenz)", 0.1, 0.8, 0.35, 0.05)
         prod_dp = st.slider("Druckverlust Produktwasser-GAK (bar)", 0.2, 2.0, 0.6, 0.1)
     if konz_gak:
         st.markdown("**Konzentrat-GAK**")
         konz_ebct = st.slider("EBCT Konzentrat (min)", 5.0, 30.0, 15.0, 1.0)
-        konz_tage = st.slider("Standzeit bis Kohletausch Konzentrat (Tage)", 30, 730, 180, 30)
+        konz_tage = st.slider("Standzeit bis Kohletausch Konzentrat (Tage)", 30, 360, 30, 30)
         konz_doc = st.slider("Matrix-Faktor Konzentrat (vor DOC-Aufkonzentrierung)", 0.1, 0.8, 0.35, 0.05)
         konz_dp = st.slider("Druckverlust Konzentrat-GAK (bar)", 0.2, 2.0, 0.6, 0.1)
         r_doc = st.slider("DOC-Rückhalt der NF", 0.50, 0.99, 0.90, 0.01,
