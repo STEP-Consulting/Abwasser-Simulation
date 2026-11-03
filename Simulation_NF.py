@@ -124,8 +124,8 @@ with st.sidebar.expander("🪨 Aktivkohle (GAK)", expanded=False):
     konz_gak = st.checkbox("Konzentrat-GAK aktivieren (behandeltes Konzentrat wird wieder zugemischt)",
                            value=False)
 
-    prod_ebct, prod_tage, prod_doc, prod_dp = 15.0, 180, 0.35, 0.6
-    konz_ebct, konz_tage, konz_doc, konz_dp = 15.0, 180, 0.35, 0.6
+    prod_ebct, prod_tage, prod_doc, prod_dp = 15.0, 30, 0.35, 0.6
+    konz_ebct, konz_tage, konz_doc, konz_dp = 15.0, 30, 0.35, 0.6
     r_doc = 0.90
 
     if prod_gak:
