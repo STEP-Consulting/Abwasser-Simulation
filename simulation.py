@@ -87,14 +87,14 @@ BASE_DATA = {
     "Kd_m3_kg": [
         0.05, 0.02,
         0.329, 2.226, 0.0, 0.15, 0.007, 2.5,
-        0.016, 0.007, 0.0, 0.0, 0.013,
+        0.016, 0.007, 0.0, 0.0004, 0.013,
     ],
     # k_biol in L/(g SS*d) nach Joss et al. (2006); Paracetamol: van Bergen et al. (2021), umgerechnet
     # CSB nutzt f_S statt k_biol, BSB5 nutzt k als 1/d (siehe _biologie)
     "k_biol_L_gSS_d": [
         0.0, 3.5,
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.1, 21.0, 0.01, 3.5, 1.0,
+        0.1, 21.0, 0.01, 58, 1.0,
     ],
     "KF": [
         0.0, 0.0,
