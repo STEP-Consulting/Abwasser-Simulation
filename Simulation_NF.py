@@ -428,28 +428,60 @@ def plot_konzentrationsverlauf(df_res, substanz, ist_ozon_ansicht):
 
 def plot_frachtverteilung(df_res):
     d = df_res[df_res["Gruppe"] != "Summenparameter"].copy()
+    
     spalten = [
-        ("Fracht_Biologie_%", "Biologie (Abbau + Sorption)"),
-        ("Fracht_Prod_GAK_%", "Produktwasser-GAK"),
-        ("Fracht_Konz_GAK_%", "Konzentrat-GAK"),
-        ("Fracht_Konz_Abzug_%", "Konzentrat-Abzug"),
-        ("Fracht_Endwasser_%", "Endwasser"),
+        ("Fracht_Biologie_%", "Biologie (Abbau + Sorption)", "#2a7f7a"),  # Professionelles Petrol/Teal
+        ("Fracht_Prod_GAK_%", "Produktwasser-GAK", "#5bb5ad"),           # Helles Petrol
+        ("Fracht_Konz_GAK_%", "Konzentrat-GAK", "#a5d9d3"),           # Sehr helles Petrol
+        ("Fracht_Konz_Abzug_%", "Konzentrat-Abzug", "#b0b0b0"),       # Neutrales Grau
+        ("Fracht_Endwasser_%", "Verbleib im Endwasser", "#e4572e"),   # Dezentes Korallenrot (Restfracht)
     ]
-    muster = ["", "/", "\\", "x", "."]
+    
+    # Nach Endwasser-Anteil sortieren, damit die kritischsten Stoffe oben stehen
+    if "Fracht_Endwasser_%" in d.columns:
+        d = d.sort_values(by="Fracht_Endwasser_%", ascending=True)
+
     fig = go.Figure()
-    for (col, name), pat in zip(spalten, muster):
-        if d[col].fillna(0).abs().sum() <= 1e-9:
+    
+    for col, name, farbe in spalten:
+        if col not in d.columns or d[col].fillna(0).abs().sum() <= 1e-9:
             continue
         fig.add_trace(go.Bar(
-            y=d["Substanzname"], x=d[col], name=name, orientation="h",
-            marker=dict(color="white", line=dict(color="black", width=1.2), pattern=dict(shape=pat)),
+            y=d["Substanzname"], 
+            x=d[col], 
+            name=name, 
+            orientation="h",
+            marker=dict(
+                color=farbe, 
+                line=dict(color="black", width=0.8) # Feiner, eleganter Rand
+            ),
+            hovertemplate="<b>%{y}</b><br>%{name}: %{x:.1f}%<extra></extra>"
         ))
+
     fig.update_layout(
-        barmode="stack", title="Frachtverteilung (bezogen auf die Fracht nach der Vorklärung)",
-        template="plotly_white", height=420,
-        xaxis=dict(title="Anteil an der Fracht [%]", range=[0, 100], showline=True, linecolor="black"),
-        yaxis=dict(autorange="reversed"), margin=dict(l=50, r=25, t=60, b=50),
-        legend=dict(orientation="h", y=-0.2), font=dict(family="Arial", color="black"),
+        barmode="stack", 
+        title="<b>Frachtverteilung</b> (Anteil an der Fracht nach Vorklärung)",
+        template="plotly_white", 
+        height=450,
+        xaxis=dict(
+            title="Anteil an der Fracht [%]", 
+            range=[0, 100], 
+            showline=True, 
+            linecolor="black",
+            gridcolor="#eeeeee"
+        ),
+        yaxis=dict(
+            showline=True, 
+            linecolor="black"
+        ), 
+        margin=dict(l=80, r=25, t=60, b=80),
+        legend=dict(
+            orientation="h", 
+            y=-0.25, 
+            x=0.5, 
+            xanchor="center"
+        ), 
+        font=dict(family="Arial", color="black"),
     )
     return fig
 
