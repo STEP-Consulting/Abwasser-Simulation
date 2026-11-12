@@ -693,7 +693,17 @@ def simuliere(p):
         if ist_ozon else np.nan
     )
 
-
+# ---------------------------------------------------------
+    # FALLBACK / SICHERSTELLUNG ALLER KENNZAHLEN (Ozon vs. NF)
+    # ---------------------------------------------------------
+    if "kosten_nf_gesamt_m3" not in kenn:
+        kenn["kosten_nf_gesamt_m3"] = np.nan
+        kenn["kosten_nf_gesamt_eur_a"] = np.nan
+    if "kosten_ozon_gesamt_m3" not in kenn:
+        kenn["kosten_ozon_gesamt_m3"] = np.nan
+        kenn["kosten_ozon_gesamt_eur_a"] = np.nan
+        
+    return {"df": df_res, "fl": fl, "kenn": kenn}
 
 # =========================================================
 # SENSITIVITÄT (one-at-a-time)
