@@ -158,6 +158,45 @@ def standard_parameter():
 
 
 # =========================================================
+# KOSTENANNAHMEN
+# =========================================================
+
+KOSTEN = {
+    "strompreis": 0.20,                 # €/kWh
+
+    # Ozonung
+    "sauerstoffpreis": 0.15,            # €/kg O2
+    "ozonkonzentration": 0.10,          # kg O3/kg O2
+    "ozon_wartung": 0.005,              # €/m³ Zulauf
+    "ozon_gesamt_opex": 0.018,          # €/m³ Zulauf
+
+    # Nanofiltration
+    "membranpreis": 40.0,               # €/m²
+    "membranlebensdauer": 6.0,          # Jahre
+    "membranfluss": 15.0,               # L/(m²*h)
+
+    "antiscalant_dosis": 3.0,           # g/m³ NF-Zulauf
+    "antiscalant_preis": 4.0,           # €/kg
+
+    "cip_kosten": 0.005,                # €/m³ NF-Zulauf
+    "nf_wartung": 0.010,                # €/m³ Permeat
+
+    # Personal
+    "personal_nf": 0.30,                # FTE
+    "personal_gak": 0.10,               # FTE je GAK-Stufe
+    "personal_ozon": 0.10,              # FTE
+    "personalkosten": 75000.0,          # €/FTE*a
+
+    # Aktivkohle
+    "aktivkohlepreis": 1800.0,          # €/t
+    "gak_betrieb": 0.003,               # €/m³ behandeltes Wasser
+
+    # Konzentrat
+    "konzentratentsorgung": 0.0,        # €/m³ Konzentrat
+}
+
+
+# =========================================================
 # HYDRAULIK
 # =========================================================
 
@@ -476,13 +515,182 @@ def simuliere(p):
     kenn["konz_doc_eff"] = konz_doc_eff
     kenn["aufkonz_doc"] = aufkonz_doc
 
-    # Kosten Ozonung (pauschal)
-    kenn["opex_ozon_eur_a"] = p["opex_ozon"] * q_feed * BETRIEBSSTUNDEN_JAHR if ist_ozon else np.nan
+   
+    # =====================================================
+    # KOSTENBERECHNUNG
+    # Bezugsgröße: €/m³ behandelter Zulauf
+    # =====================================================
 
-    kenn["bilanz_abw"] = (float((df_res["Bilanzsumme_%"] - 100.0).abs().max())
-                          if not ist_ozon else np.nan)
+    jahresmenge = q_feed * BETRIEBSSTUNDEN_JAHR
 
-    return {"df": df_res, "fl": fl, "kenn": kenn}
+    if ist_ozon:
+
+        # Pauschaler Gesamt-OPEX der Ozonung
+        # Sauerstoff, Strom, Wartung und Personal werden
+        # nicht zusätzlich addiert (Vermeidung Doppelzählung).
+
+        kosten_ozon = KOSTEN["ozon_gesamt_opex"]
+
+        kenn["kosten_ozon_gesamt_m3"] = kosten_ozon
+        kenn["kosten_ozon_gesamt_eur_a"] = kosten_ozon * jahresmenge
+
+        kenn["kosten_nf_gesamt_m3"] = np.nan
+        kenn["kosten_nf_gesamt_eur_a"] = np.nan
+
+    else:
+
+        # ---------------------------------------------
+        # 1. Stromkosten
+        # ---------------------------------------------
+
+        kosten_strom = (
+            kenn["spez_energie_kwh_m3"]
+            * KOSTEN["strompreis"]
+        )
+
+        # ---------------------------------------------
+        # 2. Membrankosten (annualisierte CAPEX)
+        # ---------------------------------------------
+
+        membranflaeche = (
+            fl["q_perm"] * 1000.0
+            / KOSTEN["membranfluss"]
+        )
+
+        membrankosten_jahr = (
+            membranflaeche
+            * KOSTEN["membranpreis"]
+            / KOSTEN["membranlebensdauer"]
+        )
+
+        kosten_membran = membrankosten_jahr / jahresmenge
+
+        # ---------------------------------------------
+        # 3. Antiscalant
+        # ---------------------------------------------
+
+        kosten_antiscalant = (
+            KOSTEN["antiscalant_dosis"] / 1000.0
+            * KOSTEN["antiscalant_preis"]
+            * fl["q_nf"] / q_feed
+        )
+
+        # ---------------------------------------------
+        # 4. Reinigungschemikalien (CIP)
+        # ---------------------------------------------
+
+        kosten_cip = (
+            KOSTEN["cip_kosten"]
+            * fl["q_nf"] / q_feed
+        )
+
+        # ---------------------------------------------
+        # 5. Wartung NF
+        # ---------------------------------------------
+
+        kosten_wartung = (
+            KOSTEN["nf_wartung"]
+            * fl["q_perm"] / q_feed
+        )
+
+        # ---------------------------------------------
+        # 6. Personalkosten NF
+        # ---------------------------------------------
+
+        kosten_personal_nf = (
+            KOSTEN["personal_nf"]
+            * KOSTEN["personalkosten"]
+            / jahresmenge
+        )
+
+        # ---------------------------------------------
+        # 7. Aktivkohle
+        # ---------------------------------------------
+
+        kosten_aktivkohle = (
+            kenn["kohle_gesamt_t_a"]
+            * KOSTEN["aktivkohlepreis"]
+            / jahresmenge
+        )
+
+        # ---------------------------------------------
+        # 8. GAK-Betrieb
+        # ---------------------------------------------
+
+        kosten_gak_betrieb = (
+            (fl["q_prod"] if prod_gak else 0.0)
+            + (q_k if konz_gak else 0.0)
+        ) / q_feed * KOSTEN["gak_betrieb"]
+
+        # ---------------------------------------------
+        # 9. Personal GAK
+        # ---------------------------------------------
+
+        anzahl_gak = int(prod_gak) + int(konz_gak)
+
+        kosten_personal_gak = (
+            anzahl_gak
+            * KOSTEN["personal_gak"]
+            * KOSTEN["personalkosten"]
+            / jahresmenge
+        )
+
+        # ---------------------------------------------
+        # 10. Konzentratentsorgung
+        # ---------------------------------------------
+
+        kosten_konzentrat = (
+            q_k / q_feed
+            * KOSTEN["konzentratentsorgung"]
+        )
+
+        # ---------------------------------------------
+        # 11. Gesamtkosten NF
+        # ---------------------------------------------
+
+        kosten_nf = (
+            kosten_strom
+            + kosten_membran
+            + kosten_antiscalant
+            + kosten_cip
+            + kosten_wartung
+            + kosten_personal_nf
+            + kosten_aktivkohle
+            + kosten_gak_betrieb
+            + kosten_personal_gak
+            + kosten_konzentrat
+        )
+
+        # Einzelkosten speichern
+
+        kenn.update({
+            "kosten_strom": kosten_strom,
+            "kosten_membran": kosten_membran,
+            "kosten_antiscalant": kosten_antiscalant,
+            "kosten_cip": kosten_cip,
+            "kosten_wartung": kosten_wartung,
+            "kosten_personal_nf": kosten_personal_nf,
+            "kosten_aktivkohle": kosten_aktivkohle,
+            "kosten_gak_betrieb": kosten_gak_betrieb,
+            "kosten_personal_gak": kosten_personal_gak,
+            "kosten_konzentrat": kosten_konzentrat,
+
+            "kosten_nf_gesamt_m3": kosten_nf,
+            "kosten_nf_gesamt_eur_a": kosten_nf * jahresmenge,
+
+            "membranflaeche_m2": membranflaeche,
+            "membrankosten_eur_a": membrankosten_jahr,
+        })
+
+        kenn["kosten_ozon_gesamt_m3"] = np.nan
+        kenn["kosten_ozon_gesamt_eur_a"] = np.nan
+
+    # Bestehende Ozon-OPEX-Kennzahl beibehalten
+    kenn["opex_ozon_eur_a"] = (
+        KOSTEN["ozon_gesamt_opex"] * jahresmenge
+        if ist_ozon else np.nan
+    )
+
 
 
 # =========================================================
