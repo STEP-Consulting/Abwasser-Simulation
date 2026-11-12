@@ -647,6 +647,150 @@ with tab_vgl:
     )
     st.plotly_chart(fig, use_container_width=True)
 
+
+    # =====================================================
+    # KOSTENVERGLEICH NF UND OZONUNG
+    # =====================================================
+
+    st.divider()
+    st.subheader("💶 Spezifische Behandlungskosten")
+
+    # Einzelkosten NF aus dem Rechenkern
+    kosten_nf = [
+        ("Strom", kn["kosten_strom"]),
+        ("Membran (annualisiert)", kn["kosten_membran"]),
+        ("Antiscalant", kn["kosten_antiscalant"]),
+        ("Reinigungschemikalien", kn["kosten_cip"]),
+        ("Wartung NF", kn["kosten_wartung"]),
+        ("Personal NF", kn["kosten_personal_nf"]),
+        ("Aktivkohle", kn["kosten_aktivkohle"]),
+        ("GAK-Betrieb", kn["kosten_gak_betrieb"]),
+        ("Personal GAK", kn["kosten_personal_gak"]),
+        ("Konzentratentsorgung", kn["kosten_konzentrat"]),
+    ]
+
+    kosten_nf_gesamt = kn["kosten_nf_gesamt_m3"]
+    kosten_ozon_gesamt = ko["kosten_ozon_gesamt_m3"]
+
+    # Kennzahlen
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        "Gesamtkosten Ozonung",
+        f"{fmt_de(kosten_ozon_gesamt, 4)} €/m³"
+    )
+
+    c2.metric(
+        "Gesamtkosten NF",
+        f"{fmt_de(kosten_nf_gesamt, 4)} €/m³"
+    )
+
+    c3.metric(
+        "Differenz NF - Ozonung",
+        f"{fmt_de(kosten_nf_gesamt - kosten_ozon_gesamt, 4)} €/m³",
+        delta=(
+            f"{(kosten_nf_gesamt / kosten_ozon_gesamt - 1) * 100:.1f} %"
+            if kosten_ozon_gesamt > 0 else "Nicht berechenbar"
+        ),
+        delta_color="inverse"
+    )
+
+    # Daten für gestapeltes Balkendiagramm
+    fig_kosten = go.Figure()
+
+    farben = [
+        "#4C78A8", "#72A0C1", "#F2CF5B", "#ECA82C",
+        "#B279A2", "#79706E", "#59A14F", "#8CD17D",
+        "#BAB0AC", "#E45756"
+    ]
+
+    for i, (name, wert) in enumerate(kosten_nf):
+        if wert > 0:
+            fig_kosten.add_trace(go.Bar(
+                name=name,
+                x=["Nanofiltration"],
+                y=[wert],
+                marker=dict(
+                    color=farben[i],
+                    line=dict(color="black", width=0.6)
+                ),
+                hovertemplate=(
+                    f"<b>{name}</b><br>"
+                    "%{y:.5f} €/m³<extra></extra>"
+                )
+            ))
+
+    # Ozonung als pauschaler Gesamt-OPEX
+    fig_kosten.add_trace(go.Bar(
+        name="Gesamt-OPEX Ozonung",
+        x=["Ozonung"],
+        y=[kosten_ozon_gesamt],
+        marker=dict(
+            color="white",
+            line=dict(color="black", width=1.5)
+        ),
+        hovertemplate=(
+            "<b>Gesamt-OPEX Ozonung</b><br>"
+            "%{y:.5f} €/m³<extra></extra>"
+        )
+    ))
+
+    fig_kosten.update_layout(
+        barmode="stack",
+        template="plotly_white",
+        height=500,
+        title="Spezifische Kosten von Nanofiltration und Ozonung",
+        yaxis=dict(
+            title="Behandlungskosten [€/m³ Zulauf]",
+            rangemode="tozero",
+            showline=True,
+            linecolor="black",
+            gridcolor="#eeeeee"
+        ),
+        xaxis=dict(
+            showline=True,
+            linecolor="black"
+        ),
+        legend=dict(
+            orientation="h",
+            y=-0.25,
+            x=0.5,
+            xanchor="center"
+        ),
+        margin=dict(l=70, r=30, t=70, b=110),
+        font=dict(family="Arial", color="black")
+    )
+
+    # Gesamtkosten über den Balken anzeigen
+    fig_kosten.add_annotation(
+        x="Nanofiltration",
+        y=kosten_nf_gesamt,
+        text=f"{kosten_nf_gesamt:.4f} €/m³",
+        showarrow=False,
+        yshift=12,
+        font=dict(size=13, color="black")
+    )
+
+    fig_kosten.add_annotation(
+        x="Ozonung",
+        y=kosten_ozon_gesamt,
+        text=f"{kosten_ozon_gesamt:.4f} €/m³",
+        showarrow=False,
+        yshift=12,
+        font=dict(size=13, color="black")
+    )
+
+    st.plotly_chart(fig_kosten, use_container_width=True)
+
+    st.caption(
+        "Bezugsgröße: m³ behandelter Zulauf. "
+        "Die Ozonung wird mit einem pauschalen Gesamt-OPEX von 1,80 ct/m³ "
+        "angesetzt. Die NF-Kosten enthalten annualisierte Membrankosten "
+        "und die berechneten Betriebskosten. "
+        "Alle Kostenbestandteile der NF werden einzeln dargestellt."
+    )
+
+
 # ---------------------------------------------------------
 # 6.3 SENSITIVITÄT
 # ---------------------------------------------------------
