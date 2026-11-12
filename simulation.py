@@ -454,7 +454,7 @@ def simuliere(p):
     Rückgabe:
       df   - Ergebnistabelle je Substanz
       fl   - Mengenströme (m³/h)
-      kenn - Kennzahlen
+       - zahlen
     """
 
     ist_ozon = p["konzept"] == "ozon"
@@ -732,7 +732,7 @@ def simuliere(p):
     df_res = pd.DataFrame(rows)
 
     # =====================================================
-    # KENNZAHLEN
+    # ZAHLEN
     # =====================================================
 
     def conc(stoff, spalte="C_Endwasser"):
@@ -801,6 +801,9 @@ def simuliere(p):
         "wasserbilanz_abw": abs(
             q_prod + q_k - q_feed
         ),
+
+      "bilanz_abw": abs(q_prod + q_k - q_feed),        # <-- Hinzugefügt für die App
+        "wasserbilanz_abw": abs(q_prod + q_k - q_feed),
     }
 
     # =====================================================
