@@ -529,10 +529,12 @@ def simuliere(p):
         # Sauerstoff, Strom, Wartung und Personal werden
         # nicht zusätzlich addiert (Vermeidung Doppelzählung).
 
-        kosten_ozon = KOSTEN["ozon_gesamt_opex"]
+        kosten_ozon = float(p["opex_ozon"])
 
-        kenn["kosten_ozon_gesamt_m3"] = kosten_ozon
-        kenn["kosten_ozon_gesamt_eur_a"] = kosten_ozon * jahresmenge
+       kenn["opex_ozon_eur_a"] = (
+    float(p["opex_ozon"]) * jahresmenge
+    if ist_ozon else np.nan
+)
 
         kenn["kosten_nf_gesamt_m3"] = np.nan
         kenn["kosten_nf_gesamt_eur_a"] = np.nan
