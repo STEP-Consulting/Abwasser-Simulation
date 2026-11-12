@@ -781,6 +781,9 @@ def simuliere(p):
 
         "hrt_eff_h": hrt_eff_h,
 
+      "avg_pfas_red": float(df_res.loc[pfas, "Konzentrationsreduktion_%"].mean()), # <--- NEU HIER
+        "hrt_eff_h": hrt_eff_h,
+
         "ress_eff_g_m3": (
             p["x_ts"]
             * (hrt_eff_h / 24.0)
