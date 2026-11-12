@@ -495,7 +495,7 @@ def plot_frachtverteilung(df_res):
 # 6. REGISTERKARTEN
 # =========================================================
 
-tab_ein, tab_vgl, tab_sens = st.tabs(["📌 Einzelkonzept", "⚖️ Vergleich Ozonung ↔ NF"])
+tab_ein, tab_vgl = st.tabs(["📌 Einzelkonzept", "⚖️ Vergleich Ozonung ↔ NF"])
 
 # ---------------------------------------------------------
 # 6.1 EINZELKONZEPT
