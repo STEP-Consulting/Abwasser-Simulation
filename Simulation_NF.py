@@ -430,14 +430,13 @@ def plot_frachtverteilung(df_res):
     d = df_res[df_res["Gruppe"] != "Summenparameter"].copy()
     
     spalten = [
-        ("Fracht_Biologie_%", "Biologie (Abbau + Sorption)", "#2a7f7a"),  # Professionelles Petrol/Teal
-        ("Fracht_Prod_GAK_%", "Produktwasser-GAK", "#5bb5ad"),           # Helles Petrol
-        ("Fracht_Konz_GAK_%", "Konzentrat-GAK", "#a5d9d3"),           # Sehr helles Petrol
-        ("Fracht_Konz_Abzug_%", "Konzentrat-Abzug", "#b0b0b0"),       # Neutrales Grau
-        ("Fracht_Endwasser_%", "Verbleib im Endwasser", "#e4572e"),   # Dezentes Korallenrot (Restfracht)
+        ("Fracht_Biologie_%", "Biologie (Abbau + Sorption)", "#2a7f7a"),  
+        ("Fracht_Prod_GAK_%", "Produktwasser-GAK", "#5bb5ad"),           
+        ("Fracht_Konz_GAK_%", "Konzentrat-GAK", "#a5d9d3"),           
+        ("Fracht_Konz_Abzug_%", "Konzentrat-Abzug", "#b0b0b0"),       
+        ("Fracht_Endwasser_%", "Verbleib im Endwasser", "#e4572e"),   
     ]
     
-    # Nach Endwasser-Anteil sortieren, damit die kritischsten Stoffe oben stehen
     if "Fracht_Endwasser_%" in d.columns:
         d = d.sort_values(by="Fracht_Endwasser_%", ascending=True)
 
@@ -446,14 +445,21 @@ def plot_frachtverteilung(df_res):
     for col, name, farbe in spalten:
         if col not in d.columns or d[col].fillna(0).abs().sum() <= 1e-9:
             continue
+        
+        # Textwerte nur anzeigen, wenn der Anteil > 1% ist
+        text_werte = [f"{val:.1f}%" if val > 1.0 else "" for val in d[col]]
+        
         fig.add_trace(go.Bar(
             y=d["Substanzname"], 
             x=d[col], 
             name=name, 
             orientation="h",
+            text=text_werte,
+            textposition="inside",
+            insidetextanchor="middle",
             marker=dict(
                 color=farbe, 
-                line=dict(color="black", width=0.8) # Feiner, eleganter Rand
+                line=dict(color="black", width=0.8)
             ),
             hovertemplate="<b>%{y}</b><br>%{name}: %{x:.1f}%<extra></extra>"
         ))
@@ -484,7 +490,6 @@ def plot_frachtverteilung(df_res):
         font=dict(family="Arial", color="black"),
     )
     return fig
-
 
 # =========================================================
 # 6. REGISTERKARTEN
