@@ -248,6 +248,7 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
         parts.append(line([(700, 100), (770, 100)], arrow=True))
         parts.append(text(810, 94, "Gereinigtes", anchor="start"))
         parts.append(text(810, 111, "Endwasser", anchor="start"))
+        parts.append(text(810, 128, f"Q = {q_feed:.0f} m³/h", "label", "start"))
     else:
         parts.append(text(600, 15, "Nanofiltration", "subtitle"))
         parts.append(line([(375, 100), (535, 100)], arrow=True))
@@ -290,11 +291,13 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
             parts.append(line([(595, 215), (595, 260), (760, 260)], arrow=True))
             parts.append(text(770, 264, f"Konzentrat-Abzug ({fl['q_konz_aus']:.1f} m³/h)", "label", "start"))
 
-        # Endwasser-Ausgabe inklusive des berechneten Produktstroms (fl['q_prod'])
+        # Endwasser-Ausgabe (schließt die Bilanz exakt: bei Konzentrat-GAK kommt alles wieder an)
         parts.append(line([(mix_x, 100), (mix_x + 70, 100)], arrow=True))
         parts.append(text(mix_x + 85, 90, "Gereinigtes", anchor="start"))
         parts.append(text(mix_x + 85, 105, "Endwasser", anchor="start"))
-        parts.append(text(mix_x + 85, 120, f"Q = {fl['q_prod']:.1f} m³/h", "label", "start"))
+        
+        q_end_aktuell = q_feed if aktivieren_konz_gak else fl['q_prod']
+        parts.append(text(mix_x + 85, 120, f"Q = {q_end_aktuell:.1f} m³/h", "label", "start"))
 
     parts.append("</svg>")
     return "".join(parts)
