@@ -613,6 +613,7 @@ with tab_vgl:
 
     zeilen = [
         ("Ø Arzneimittel-Reduktion (Endwasser)", "%", "avg_phac_red", 1),
+        ("Ø PFAS-Reduktion (Endwasser)", "%", "avg_pfas_red", 1),
         ("PFAS-Summe (Endwasser)", "ng/L", "pfas_sum_end", 0),
         ("PFOA + PFOS (Endwasser)", "ng/L", "pfoa_pfos_end", 1),
         ("PFAS-Summe (Produktwasser)", "ng/L", "pfas_sum_prod", 0),
