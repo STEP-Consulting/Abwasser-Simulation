@@ -290,9 +290,11 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
             parts.append(line([(595, 215), (595, 260), (760, 260)], arrow=True))
             parts.append(text(770, 264, f"Konzentrat-Abzug ({fl['q_konz_aus']:.1f} m³/h)", "label", "start"))
 
+        # Endwasser-Ausgabe inklusive des berechneten Produktstroms (fl['q_prod'])
         parts.append(line([(mix_x, 100), (mix_x + 70, 100)], arrow=True))
-        parts.append(text(mix_x + 85, 94, "Gereinigtes", anchor="start"))
-        parts.append(text(mix_x + 85, 111, "Endwasser", anchor="start"))
+        parts.append(text(mix_x + 85, 90, "Gereinigtes", anchor="start"))
+        parts.append(text(mix_x + 85, 105, "Endwasser", anchor="start"))
+        parts.append(text(mix_x + 85, 120, f"Q = {fl['q_prod']:.1f} m³/h", "label", "start"))
 
     parts.append("</svg>")
     return "".join(parts)
@@ -314,7 +316,6 @@ html_schema = f"""
 """
 components.html(html_schema, height=370, scrolling=False)
 st.divider()
-
 # =========================================================
 # 4. ZULAUFKONZENTRATIONEN
 # =========================================================
