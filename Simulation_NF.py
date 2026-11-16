@@ -649,8 +649,7 @@ with tab_vgl:
         ],
     })
     st.dataframe(tabelle, use_container_width=True, hide_index=True)
-    st.caption("Der Energiewert der Ozonung ist der Referenzwert der KA Aachen-Sörs (2018). Die NF-Werte sind "
-               "eine Untergrenze (nur Hochdruckpumpe und GAK-Druckverlust).")
+    st.caption("Der Energiewert der Ozonung ist der Referenzwert der KA Aachen-Sörs (2018).")
 
     d_o = r_o["df"].set_index("Substanzname")
     d_n = r_n["df"].set_index("Substanzname")
