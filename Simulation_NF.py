@@ -528,17 +528,7 @@ with tab_ein:
 
     st.divider()
 
-    # Mengenströme
-    if not ist_ozon:
-        st.header("🔁 Mengenströme")
-        h1, h2, h3, h4, h5 = st.columns(5)
-        h1.metric("Biologie-Zulauf", f"{fl['q_bio']:.1f} m³/h",
-                  delta=f"+{(fl['q_bio'] / q_feed - 1.0) * 100.0:.1f} % hydraulisch", delta_color="off")
-        h2.metric("NF-Zulauf", f"{fl['q_nf']:.1f} m³/h")
-        h3.metric("Produktwasser", f"{fl['q_prod']:.1f} m³/h")
-        h4.metric("Rückführung", f"{fl['q_rez']:.1f} m³/h")
-        h5.metric("Konzentrat (Abzug bzw. zur GAK)", f"{fl['q_konz_aus']:.1f} m³/h")
-        st.divider()
+
 
     # Energie & Betriebsmittel
     st.header("⚡ Energie, Betriebsmittel & Kosten")
