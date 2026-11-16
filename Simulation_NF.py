@@ -3,7 +3,7 @@
 Abwasser-Simulation: Verfahrensvergleich & Pilotanlagen-Vorbereitung
 Oberfläche (Streamlit). Der Rechenkern liegt in simulation.py.
 
-Start:  streamlit run app.py
+Start:  streamlit run Simulation_NF.py
 Passwort: in .streamlit/secrets.toml  ->  password = "..."    oder Umgebungsvariable APP_PASSWORD
 """
 
@@ -75,12 +75,11 @@ with st.expander("💡 Bedienung & Modellübersicht", expanded=False):
 
     1. **Konzept wählen** (Seitenleiste): bestimmt die *Einzelansicht* und das Fließbild.
     2. **Parameter anpassen:** Alle Einstellungen in der Seitenleiste gelten auch für die
-       Registerkarten *Vergleich* und *Sensitivität*.
+       Registerkarte *Vergleich*.
     3. **Zulaufkonzentrationen** unter dem Fließbild anpassen.
-    4. **Ergebnisse** in den drei Registerkarten ansehen:
+    4. **Ergebnisse** in den zwei Registerkarten ansehen:
        * *Einzelkonzept:* Kennzahlen, Mengenströme, Energie, Stoffbilanz, Diagramme.
        * *Vergleich:* Ozonung und NF nebeneinander mit denselben Eingaben.
-       * *Sensitivität:* Welche Parameter bewegen das Ergebnis am stärksten?
 
     **Wichtige Hinweise**
 
@@ -101,7 +100,7 @@ verfahrens_wahl = st.sidebar.radio(
     ["Bestandssystem (Ozonung)", "Nanofiltration (NF)"],
 )
 ist_ozon = (verfahrens_wahl == "Bestandssystem (Ozonung)")
-st.sidebar.caption("Die Registerkarten *Vergleich* und *Sensitivität* nutzen immer alle Einstellungen unten.")
+st.sidebar.caption("Die Registerkarte *Vergleich* nutzt immer alle Einstellungen unten.")
 
 with st.sidebar.expander("🔀 Hydraulik & Mengenströme", expanded=True):
     q_feed = st.slider("Rohwasserzulauf Q (m³/h)", 10.0, 500.0, 100.0, 5.0)
@@ -147,7 +146,7 @@ with st.sidebar.expander("🪨 Aktivkohle (GAK)", expanded=False):
         mittelwert = st.checkbox("Mittlere Elimination über die Standzeit (statt Momentaufnahme am Ende)",
                                  value=True)
         lastabhaengig = st.checkbox("Lastabhängige Kapazität (Freundlich, experimentell)", value=False,
-                                    help="BV50 wird mit (C_Zulauf / C_NF-Zulauf)^(1/n − 1) skaliert.")
+                                   help="BV50 wird mit (C_Zulauf / C_NF-Zulauf)^(1/n − 1) skaliert.")
         n_inv = st.slider("Freundlich 1/n (Platzhalter)", 0.2, 0.9, 0.5, 0.05) if lastabhaengig else 0.5
     else:
         mittelwert, lastabhaengig, n_inv = True, False, 0.5
@@ -291,7 +290,6 @@ def build_process_svg(is_ozon, has_bypass, aktivieren_gak, aktivieren_konz_gak, 
             parts.append(line([(595, 215), (595, 260), (760, 260)], arrow=True))
             parts.append(text(770, 264, f"Konzentrat-Abzug ({fl['q_konz_aus']:.1f} m³/h)", "label", "start"))
 
-        # Endwasser-Ausgabe (schließt die Bilanz exakt: bei Konzentrat-GAK kommt alles wieder an)
         parts.append(line([(mix_x, 100), (mix_x + 70, 100)], arrow=True))
         parts.append(text(mix_x + 85, 90, "Gereinigtes", anchor="start"))
         parts.append(text(mix_x + 85, 105, "Endwasser", anchor="start"))
@@ -319,6 +317,7 @@ html_schema = f"""
 """
 components.html(html_schema, height=370, scrolling=False)
 st.divider()
+
 # =========================================================
 # 4. ZULAUFKONZENTRATIONEN
 # =========================================================
@@ -450,7 +449,6 @@ def plot_frachtverteilung(df_res):
         if col not in d.columns or d[col].fillna(0).abs().sum() <= 1e-9:
             continue
         
-        # Textwerte nur anzeigen, wenn der Anteil > 1% ist
         text_werte = [f"{val:.1f}%" if val > 1.0 else "" for val in d[col]]
         
         fig.add_trace(go.Bar(
@@ -495,8 +493,9 @@ def plot_frachtverteilung(df_res):
     )
     return fig
 
+
 # =========================================================
-# 6. REGISTERKARTEN
+# 6. REGISTERKARTEN (Einzelkonzept & Vergleich)
 # =========================================================
 
 tab_ein, tab_vgl = st.tabs(["📌 Einzelkonzept", "⚖️ Vergleich Ozonung ↔ NF"])
@@ -516,8 +515,8 @@ with tab_ein:
     zeige_zielwerte(kenn, ist_ozon, konz_gak)
 
     if not ist_ozon:
-        if kenn["bilanz_abw"] > 1e-6:
-            st.error(f"Massenbilanz nicht geschlossen (max. Abweichung {kenn['bilanz_abw']:.3g} %)")
+        if kenn["wasserbilanz_abw"] > 1e-6:
+            st.error(f"Massenbilanz nicht geschlossen (max. Abweichung {kenn['wasserbilanz_abw']:.3g} %)")
         else:
             st.caption("✅ Frachtbilanz geschlossen (Biologie + GAK-Stufen + Konzentrat-Abzug + Endwasser = 100 %).")
         if not konz_gak:
@@ -558,7 +557,7 @@ with tab_ein:
         e4.metric("Spez. Energie je m³ Zulauf", f"{kenn['spez_energie_kwh_m3']:.3f} kWh/m³",
                   delta=f"{kenn['spez_energie_kwh_m3'] / ref:.1f}× Ozonung", delta_color="off",
                   help=f"Vergleichswert Ozonung (KA Aachen-Sörs 2018): {ref:.3f} kWh/m³. "
-                       "Die NF-Werte enthalten nur Hochdruckpumpe und GAK-Druckverlust (Untergrenze).")
+                        "Die NF-Werte enthalten nur Hochdruckpumpe und GAK-Druckverlust (Untergrenze).")
         if prod_gak or konz_gak:
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("Kohleverbrauch Produktwasser", f"{kenn['kohle_prod_g_m3']:.1f} g/m³")
@@ -628,12 +627,27 @@ with tab_vgl:
         ("Konzentrat (Abzug bzw. zur GAK)", "m³/h", "q_konz_aus", 1),
         ("Kohlebedarf", "t/a", "kohle_gesamt_t_a", 1),
         ("Betriebskosten Ozonung (pauschal)", "€/a", "opex_ozon_eur_a", 0),
+        ("Spezifische Gesamtkosten", "€/m³", "kosten_gesamt_m3", 4),
     ]
+    
+    # Hilfsfunktion zum Auslesen der Gesamtkosten für die Tabelle
+    def get_gesamtkosten(kenn_dict, is_o):
+        if is_o:
+            return kenn_dict.get("kosten_ozon_gesamt_m3", p_basis["opex_ozon"])
+        else:
+            return kenn_dict.get("kosten_nf_gesamt_m3")
+
     tabelle = pd.DataFrame({
         "Kennzahl": [z[0] for z in zeilen],
         "Einheit": [z[1] for z in zeilen],
-        "Ozonung": [fmt_de(ko[z[2]], z[3]) for z in zeilen],
-        "Nanofiltration": [fmt_de(kn[z[2]], z[3]) for z in zeilen],
+        "Ozonung": [
+            fmt_de(get_gesamtkosten(ko, True), z[3]) if z[2] == "kosten_gesamt_m3" else fmt_de(ko.get(z[2]), z[3])
+            for z in zeilen
+        ],
+        "Nanofiltration": [
+            fmt_de(get_gesamtkosten(kn, False), z[3]) if z[2] == "kosten_gesamt_m3" else fmt_de(kn.get(z[2]), z[3])
+            for z in zeilen
+        ],
     })
     st.dataframe(tabelle, use_container_width=True, hide_index=True)
     st.caption("Der Energiewert der Ozonung ist der Referenzwert der KA Aachen-Sörs (2018). Die NF-Werte sind "
@@ -657,7 +671,6 @@ with tab_vgl:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-
     # =====================================================
     # KOSTENVERGLEICH NF UND OZONUNG
     # =====================================================
@@ -665,24 +678,9 @@ with tab_vgl:
     st.divider()
     st.subheader("💶 Spezifische Behandlungskosten")
 
-    # Einzelkosten NF aus dem Rechenkern
-    kosten_nf = [
-        ("Strom", kn["kosten_strom"]),
-        ("Membran (annualisiert)", kn["kosten_membran"]),
-        ("Antiscalant", kn["kosten_antiscalant"]),
-        ("Reinigungschemikalien", kn["kosten_cip"]),
-        ("Wartung NF", kn["kosten_wartung"]),
-        ("Personal NF", kn["kosten_personal_nf"]),
-        ("Aktivkohle", kn["kosten_aktivkohle"]),
-        ("GAK-Betrieb", kn["kosten_gak_betrieb"]),
-        ("Personal GAK", kn["kosten_personal_gak"]),
-        ("Konzentratentsorgung", kn["kosten_konzentrat"]),
-    ]
-
     kosten_nf_gesamt = kn["kosten_nf_gesamt_m3"]
-    kosten_ozon_gesamt = ko["kosten_ozon_gesamt_m3"]
+    kosten_ozon_gesamt = p_basis["opex_ozon"]
 
-    # Kennzahlen
     c1, c2, c3 = st.columns(3)
 
     c1.metric(
@@ -694,110 +692,11 @@ with tab_vgl:
         "Gesamtkosten NF",
         f"{fmt_de(kosten_nf_gesamt, 4)} €/m³"
     )
-
+    
+    differenz = kosten_nf_gesamt - kosten_ozon_gesamt
     c3.metric(
-        "Differenz NF - Ozonung",
-        f"{fmt_de(kosten_nf_gesamt - kosten_ozon_gesamt, 4)} €/m³",
-        delta=(
-            f"{(kosten_nf_gesamt / kosten_ozon_gesamt - 1) * 100:.1f} %"
-            if kosten_ozon_gesamt > 0 else "Nicht berechenbar"
-        ),
+        "Differenz (NF - Ozon)",
+        f"{fmt_de(differenz, 4)} €/m³",
+        delta="Mehrkosten NF" if differenz > 0 else "Günstiger NF",
         delta_color="inverse"
     )
-
-    # Daten für gestapeltes Balkendiagramm
-    fig_kosten = go.Figure()
-
-    farben = [
-        "#4C78A8", "#72A0C1", "#F2CF5B", "#ECA82C",
-        "#B279A2", "#79706E", "#59A14F", "#8CD17D",
-        "#BAB0AC", "#E45756"
-    ]
-
-    for i, (name, wert) in enumerate(kosten_nf):
-        if wert > 0:
-            fig_kosten.add_trace(go.Bar(
-                name=name,
-                x=["Nanofiltration"],
-                y=[wert],
-                marker=dict(
-                    color=farben[i],
-                    line=dict(color="black", width=0.6)
-                ),
-                hovertemplate=(
-                    f"<b>{name}</b><br>"
-                    "%{y:.5f} €/m³<extra></extra>"
-                )
-            ))
-
-    # Ozonung als pauschaler Gesamt-OPEX
-    fig_kosten.add_trace(go.Bar(
-        name="Gesamt-OPEX Ozonung",
-        x=["Ozonung"],
-        y=[kosten_ozon_gesamt],
-        marker=dict(
-            color="white",
-            line=dict(color="black", width=1.5)
-        ),
-        hovertemplate=(
-            "<b>Gesamt-OPEX Ozonung</b><br>"
-            "%{y:.5f} €/m³<extra></extra>"
-        )
-    ))
-
-    fig_kosten.update_layout(
-        barmode="stack",
-        template="plotly_white",
-        height=500,
-        title="Spezifische Kosten von Nanofiltration und Ozonung",
-        yaxis=dict(
-            title="Behandlungskosten [€/m³ Zulauf]",
-            rangemode="tozero",
-            showline=True,
-            linecolor="black",
-            gridcolor="#eeeeee"
-        ),
-        xaxis=dict(
-            showline=True,
-            linecolor="black"
-        ),
-        legend=dict(
-            orientation="h",
-            y=-0.25,
-            x=0.5,
-            xanchor="center"
-        ),
-        margin=dict(l=70, r=30, t=70, b=110),
-        font=dict(family="Arial", color="black")
-    )
-
-    # Gesamtkosten über den Balken anzeigen
-    fig_kosten.add_annotation(
-        x="Nanofiltration",
-        y=kosten_nf_gesamt,
-        text=f"{kosten_nf_gesamt:.4f} €/m³",
-        showarrow=False,
-        yshift=12,
-        font=dict(size=13, color="black")
-    )
-
-    fig_kosten.add_annotation(
-        x="Ozonung",
-        y=kosten_ozon_gesamt,
-        text=f"{kosten_ozon_gesamt:.4f} €/m³",
-        showarrow=False,
-        yshift=12,
-        font=dict(size=13, color="black")
-    )
-
-    st.plotly_chart(fig_kosten, use_container_width=True)
-
-    st.caption(
-        "Bezugsgröße: m³ behandelter Zulauf. "
-        "Die Ozonung wird mit einem pauschalen Gesamt-OPEX von 1,80 ct/m³ "
-        "angesetzt. Die NF-Kosten enthalten annualisierte Membrankosten "
-        "und die berechneten Betriebskosten. "
-        "Alle Kostenbestandteile der NF werden einzeln dargestellt."
-    )
-
-
