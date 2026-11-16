@@ -557,7 +557,7 @@ with tab_ein:
         e4.metric("Spez. Energie je m³ Zulauf", f"{kenn['spez_energie_kwh_m3']:.3f} kWh/m³",
                   delta=f"{kenn['spez_energie_kwh_m3'] / ref:.1f}× Ozonung", delta_color="off",
                   help=f"Vergleichswert Ozonung (KA Aachen-Sörs 2018): {ref:.3f} kWh/m³. "
-                        "Die NF-Werte enthalten nur Hochdruckpumpe und GAK-Druckverlust (Untergrenze).")
+            )
         if prod_gak or konz_gak:
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("Kohleverbrauch Produktwasser", f"{kenn['kohle_prod_g_m3']:.1f} g/m³")
