@@ -630,7 +630,6 @@ with tab_vgl:
         ("Spezifische Gesamtkosten", "€/m³", "kosten_gesamt_m3", 4),
     ]
     
-    # Hilfsfunktion zum Auslesen der Gesamtkosten für die Tabelle
     def get_gesamtkosten(kenn_dict, is_o):
         if is_o:
             return kenn_dict.get("kosten_ozon_gesamt_m3", p_basis["opex_ozon"])
@@ -672,11 +671,25 @@ with tab_vgl:
     st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
-    # KOSTENVERGLEICH NF UND OZONUNG
+    # KOSTENVERGLEICH NF UND OZONUNG (VOLLSTÄNDIG WIEDER DA)
     # =====================================================
 
     st.divider()
     st.subheader("💶 Spezifische Behandlungskosten")
+
+    # Einzelkosten NF aus dem Rechenkern
+    kosten_nf = [
+        ("Strom", kn["kosten_strom"]),
+        ("Membran (annualisiert)", kn["kosten_membran"]),
+        ("Antiscalant", kn["kosten_antiscalant"]),
+        ("Reinigungschemikalien", kn["kosten_cip"]),
+        ("Wartung NF", kn["kosten_wartung"]),
+        ("Personal NF", kn["kosten_personal_nf"]),
+        ("Aktivkohle", kn["kosten_aktivkohle"]),
+        ("GAK-Betrieb", kn["kosten_gak_betrieb"]),
+        ("Personal GAK", kn["kosten_personal_gak"]),
+        ("Konzentratentsorgung", kn["kosten_konzentrat"]),
+    ]
 
     kosten_nf_gesamt = kn["kosten_nf_gesamt_m3"]
     kosten_ozon_gesamt = p_basis["opex_ozon"]
@@ -700,3 +713,11 @@ with tab_vgl:
         delta="Mehrkosten NF" if differenz > 0 else "Günstiger NF",
         delta_color="inverse"
     )
+
+    st.markdown("##### Detaillierte NF-Kostenaufteilung (€/m³ behandelter Zulauf):")
+    tabelle_kosten = pd.DataFrame({
+        "Kostenart": [k[0] for k in kosten_nf],
+        "Spezifische Kosten (€/m³)": [fmt_de(k[1], 4) for k in kosten_nf],
+        "Anteil am Gesamt (%)": [f"{(k[1] / kosten_nf_gesamt * 100):.1f} %" if kosten_nf_gesamt > 0 else "0.0 %" for k in kosten_nf]
+    })
+    st.dataframe(tabelle_kosten, use_container_width=True, hide_index=True)
