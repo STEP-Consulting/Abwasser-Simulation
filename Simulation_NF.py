@@ -670,54 +670,106 @@ with tab_vgl:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # =====================================================
-    # KOSTENVERGLEICH NF UND OZONUNG (VOLLSTÄNDIG WIEDER DA)
+ # =====================================================
+    # KOSTENVERGLEICH NF UND OZONUNG
     # =====================================================
 
     st.divider()
     st.subheader("💶 Spezifische Behandlungskosten")
 
-    # Einzelkosten NF aus dem Rechenkern
     kosten_nf = [
-        ("Strom", kn["kosten_strom"]),
-        ("Membran (annualisiert)", kn["kosten_membran"]),
-        ("Antiscalant", kn["kosten_antiscalant"]),
-        ("Reinigungschemikalien", kn["kosten_cip"]),
-        ("Wartung NF", kn["kosten_wartung"]),
-        ("Personal NF", kn["kosten_personal_nf"]),
-        ("Aktivkohle", kn["kosten_aktivkohle"]),
-        ("GAK-Betrieb", kn["kosten_gak_betrieb"]),
-        ("Personal GAK", kn["kosten_personal_gak"]),
-        ("Konzentratentsorgung", kn["kosten_konzentrat"]),
+        ("Strom", kn["kosten_strom"], "#1f4e78"),
+        ("Membran (annualisiert)", kn["kosten_membran"], "#2e75b6"),
+        ("Antiscalant", kn["kosten_antiscalant"], "#5b9bd5"),
+        ("Reinigungschemikalien", kn["kosten_cip"], "#9dc3e6"),
+        ("Wartung NF", kn["kosten_wartung"], "#bdd7ee"),
+        ("Personal NF", kn["kosten_personal_nf"], "#2a7f7a"),
+        ("Aktivkohle", kn["kosten_aktivkohle"], "#5bb5ad"),
+        ("GAK-Betrieb", kn["kosten_gak_betrieb"], "#a5d9d3"),
+        ("Personal GAK", kn["kosten_personal_gak"], "#d9d9d9"),
+        ("Konzentratentsorgung", kn["kosten_konzentrat"], "#7f7f7f"),
     ]
 
     kosten_nf_gesamt = kn["kosten_nf_gesamt_m3"]
     kosten_ozon_gesamt = p_basis["opex_ozon"]
 
     c1, c2, c3 = st.columns(3)
+    c1.metric("Gesamtkosten Ozonung", f"{fmt_de(kosten_ozon_gesamt, 4)} €/m³")
+    c2.metric("Gesamtkosten NF", f"{fmt_de(kosten_nf_gesamt, 4)} €/m³")
 
-    c1.metric(
-        "Gesamtkosten Ozonung",
-        f"{fmt_de(kosten_ozon_gesamt, 4)} €/m³"
-    )
-
-    c2.metric(
-        "Gesamtkosten NF",
-        f"{fmt_de(kosten_nf_gesamt, 4)} €/m³"
-    )
-    
     differenz = kosten_nf_gesamt - kosten_ozon_gesamt
     c3.metric(
-        "Differenz (NF - Ozon)",
+        "Differenz (NF − Ozon)",
         f"{fmt_de(differenz, 4)} €/m³",
         delta="Mehrkosten NF" if differenz > 0 else "Günstiger NF",
-        delta_color="inverse"
+        delta_color="inverse",
     )
 
-    st.markdown("##### Detaillierte NF-Kostenaufteilung (€/m³ behandelter Zulauf):")
+    # Gestapeltes Balkendiagramm: Ozonung vs. NF (nach Einzelpositionen)
+    fig_kosten = go.Figure()
+
+    fig_kosten.add_trace(go.Bar(
+        x=["Ozonung"],
+        y=[kosten_ozon_gesamt],
+        name="Ozonung (pauschal)",
+        text=[f"{fmt_de(kosten_ozon_gesamt, 4)} €/m³"],
+        textposition="inside",
+        insidetextanchor="middle",
+        marker=dict(color="#e4572e", line=dict(color="black", width=1.2)),
+        hovertemplate="<b>Ozonung (pauschal)</b>: %{y:.4f} €/m³<extra></extra>",
+    ))
+
+    for name, wert, farbe in kosten_nf:
+        if wert <= 1e-9:
+            continue
+        anteil = (wert / kosten_nf_gesamt * 100.0) if kosten_nf_gesamt > 0 else 0.0
+        fig_kosten.add_trace(go.Bar(
+            x=["Nanofiltration"],
+            y=[wert],
+            name=name,
+            text=[f"{name}: {fmt_de(wert, 4)} €/m³" if anteil > 8.0 else ""],
+            textposition="inside",
+            insidetextanchor="middle",
+            marker=dict(color=farbe, line=dict(color="black", width=0.8)),
+            hovertemplate=f"<b>{name}</b>: %{{y:.4f}} €/m³ ({anteil:.1f} %)<extra></extra>",
+        ))
+
+    # Gesamtsumme über den NF-Balken schreiben
+    fig_kosten.add_annotation(
+        x="Nanofiltration",
+        y=kosten_nf_gesamt,
+        text=f"<b>Gesamt: {fmt_de(kosten_nf_gesamt, 4)} €/m³</b>",
+        showarrow=False,
+        yshift=12,
+        font=dict(size=12, color="black"),
+    )
+
+    fig_kosten.update_layout(
+        barmode="stack",
+        template="plotly_white",
+        height=460,
+        title="<b>Kostenaufteilung im Vergleich</b> (€/m³ behandelter Zulauf)",
+        yaxis=dict(
+            title="Spezifische Kosten [€/m³]",
+            range=[0, max(kosten_nf_gesamt, kosten_ozon_gesamt) * 1.18],
+            showline=True,
+            linecolor="black",
+            gridcolor="#eeeeee",
+        ),
+        xaxis=dict(showline=True, linecolor="black"),
+        legend=dict(orientation="h", y=-0.22, x=0.5, xanchor="center"),
+        margin=dict(l=60, r=25, t=60, b=90),
+        font=dict(family="Arial", color="black"),
+    )
+    st.plotly_chart(fig_kosten, use_container_width=True)
+
+    # Kompakte Übersichtstabelle der Einzelkosten darunter
     tabelle_kosten = pd.DataFrame({
-        "Kostenart": [k[0] for k in kosten_nf],
+        "Kostenart (NF)": [k[0] for k in kosten_nf],
         "Spezifische Kosten (€/m³)": [fmt_de(k[1], 4) for k in kosten_nf],
-        "Anteil am Gesamt (%)": [f"{(k[1] / kosten_nf_gesamt * 100):.1f} %" if kosten_nf_gesamt > 0 else "0.0 %" for k in kosten_nf]
+        "Anteil (%)": [
+            f"{(k[1] / kosten_nf_gesamt * 100):.1f} %" if kosten_nf_gesamt > 0 else "0.0 %"
+            for k in kosten_nf
+        ],
     })
     st.dataframe(tabelle_kosten, use_container_width=True, hide_index=True)
