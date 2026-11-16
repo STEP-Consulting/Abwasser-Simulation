@@ -627,7 +627,7 @@ with tab_vgl:
         ("Konzentrat (Abzug bzw. zur GAK)", "m³/h", "q_konz_aus", 1),
         ("Kohlebedarf", "t/a", "kohle_gesamt_t_a", 1),
         ("Betriebskosten Ozonung (pauschal)", "€/a", "opex_ozon_eur_a", 0),
-        ("Spezifische Gesamtkosten", "€/m³", "kosten_gesamt_m3", 4),
+        ("Spezifische Betriebskosten", "€/m³", "kosten_gesamt_m3", 4),
     ]
     
     def get_gesamtkosten(kenn_dict, is_o):
